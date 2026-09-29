@@ -14,3 +14,8 @@ results/*
 !results/.gitkeep
 
 .DS_Store
+
+# py5cheSim generated output
+simulator/Figures/
+simulator/Logs/
+simulator/Statistics/
