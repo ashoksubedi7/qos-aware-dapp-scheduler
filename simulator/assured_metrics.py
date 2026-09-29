@@ -1,6 +1,14 @@
 import numpy as np
 
 
+BACKLOG_CAP = 500.0
+
+# The current AssuredQoS experiments use FDD.
+# The simulator's FDD MCS table has meaningful thresholds up to 35 dB.
+SINR_MIN_DB = 0.0
+SINR_MAX_DB = 35.0
+
+
 def slice_backlog(slice_obj):
     """Return the number of packets currently waiting in bearer queues."""
     return slice_obj.schedulerDL.updSumPcks()
@@ -40,27 +48,66 @@ def slice_max_hol_delay(slice_obj, now):
     return max_hol
 
 
+def normalize_backlog(backlog):
+    """Map queue backlog to [0, 1] using the original 500-packet cap."""
+    return float(
+        np.clip(
+            float(backlog) / BACKLOG_CAP,
+            0.0,
+            1.0,
+        )
+    )
+
+
+def normalize_sinr(sinr_db):
+    """Normalize FDD SINR to [0, 1] using the simulator MCS range."""
+    clipped = np.clip(
+        float(sinr_db),
+        SINR_MIN_DB,
+        SINR_MAX_DB,
+    )
+
+    return float(
+        (clipped - SINR_MIN_DB)
+        / (SINR_MAX_DB - SINR_MIN_DB)
+    )
+
+
+def normalize_urllc_urgency(hol_delay, deadline):
+    """Represent URLLC HoL as fraction of the scheduling deadline."""
+    if deadline <= 0:
+        raise ValueError("URLLC deadline must be greater than zero")
+
+    return float(
+        np.clip(
+            float(hol_delay) / float(deadline),
+            0.0,
+            1.0,
+        )
+    )
+
+
 def build_m1_state(slices):
-    """Context-aware state: backlog plus mean SINR for each slice."""
+    """Build normalized context-aware state."""
     embb = slices["eMBB"]
     urllc = slices["URLLC"]
     mmtc = slices["mMTC"]
 
     return np.array(
         [
-            slice_backlog(embb),
-            slice_backlog(urllc),
-            slice_backlog(mmtc),
-            slice_mean_sinr(embb),
-            slice_mean_sinr(urllc),
-            slice_mean_sinr(mmtc),
+            normalize_backlog(slice_backlog(embb)),
+            normalize_backlog(slice_backlog(urllc)),
+            normalize_backlog(slice_backlog(mmtc)),
+            normalize_sinr(slice_mean_sinr(embb)),
+            normalize_sinr(slice_mean_sinr(urllc)),
+            normalize_sinr(slice_mean_sinr(mmtc)),
         ],
         dtype=np.float32,
     )
 
 
-def build_m2_state(slices, now):
-    """QoS-aware state adds URLLC deadline urgency through max HoL."""
+def build_m2_state(slices, now, urllc_deadline):
+    """Build normalized QoS-aware state with URLLC urgency."""
     m1_state = build_m1_state(slices)
 
     urllc_hol = slice_max_hol_delay(
@@ -68,7 +115,12 @@ def build_m2_state(slices, now):
         now,
     )
 
+    urgency = normalize_urllc_urgency(
+        urllc_hol,
+        urllc_deadline,
+    )
+
     return np.append(
         m1_state,
-        np.float32(urllc_hol),
+        np.float32(urgency),
     )
