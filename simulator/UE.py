@@ -589,6 +589,10 @@ class Packet:
         self.tIn = 0
 
         self.timestamp = 0
+        self.deadline = None
+        self.deadline_missed = False
+        self.scheduled_at = None
+        self.scheduling_delay = None
 
     def printPacket(self):
         print(
