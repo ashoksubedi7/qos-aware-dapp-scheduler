@@ -9,10 +9,67 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "simulator"))
 
 from assured_metrics import (
+    build_m1_state,
+    build_m2_state,
+    normalize_backlog,
+    normalize_sinr,
+    normalize_urllc_urgency,
+    slice_backlog,
     slice_mean_sinr,
     slice_max_hol_delay,
 )
+from types import SimpleNamespace
 
+
+def make_test_slices(
+    embb_backlog=0,
+    urllc_backlog=0,
+    mmtc_backlog=0,
+    embb_sinr=20.0,
+    urllc_sinr=20.0,
+    mmtc_sinr=20.0,
+):
+    def make_slice(backlog, sinr):
+        ue = SimpleNamespace(
+            radioLinks=SimpleNamespace(
+                linkQuality=sinr
+            ),
+            bearers=[
+                SimpleNamespace(
+                    buffer=SimpleNamespace(
+                        pckts=[
+                            object()
+                            for _ in range(backlog)
+                        ]
+                    )
+                )
+            ],
+        )
+
+        scheduler = SimpleNamespace(
+            ues={
+                "ue1": ue
+            }
+        )
+
+        return SimpleNamespace(
+            schedulerDL=scheduler
+        )
+
+    return {
+        "eMBB": make_slice(
+            embb_backlog,
+            embb_sinr,
+        ),
+        "URLLC": make_slice(
+            urllc_backlog,
+            urllc_sinr,
+        ),
+        "mMTC": make_slice(
+            mmtc_backlog,
+            mmtc_sinr,
+        ),
+    }
 
 def make_ue(sinr, packet_times):
     packets = deque(
@@ -135,3 +192,79 @@ def test_invalid_deadline():
         assert False
     except ValueError:
         assert True
+def test_m1_uses_configurable_backlog_cap():
+    slices = make_test_slices(
+        embb_backlog=250,
+        urllc_backlog=250,
+        mmtc_backlog=250,
+    )
+
+    state = build_m1_state(
+        slices,
+        backlog_cap=1000,
+    )
+
+    assert np.isclose(
+        state[0],
+        0.25,
+    )
+
+
+def test_m1_uses_configurable_sinr_bounds():
+    slices = make_test_slices(
+        embb_sinr=20,
+        urllc_sinr=20,
+        mmtc_sinr=20,
+    )
+
+    state = build_m1_state(
+        slices,
+        sinr_min_db=0,
+        sinr_max_db=40,
+    )
+
+    assert np.isclose(
+        state[3],
+        0.5,
+    )
+def make_test_slices(
+    embb_backlog=0,
+    urllc_backlog=0,
+    mmtc_backlog=0,
+    embb_sinr=20.0,
+    urllc_sinr=20.0,
+    mmtc_sinr=20.0,
+):
+    def make_slice(backlog, sinr):
+        scheduler = SimpleNamespace()
+
+        scheduler.updSumPcks = (
+            lambda value=backlog: value
+        )
+
+        scheduler.ues = {
+            "ue1": SimpleNamespace(
+                radioLinks=SimpleNamespace(
+                    linkQuality=sinr
+                )
+            )
+        }
+
+        return SimpleNamespace(
+            schedulerDL=scheduler
+        )
+
+    return {
+        "eMBB": make_slice(
+            embb_backlog,
+            embb_sinr,
+        ),
+        "URLLC": make_slice(
+            urllc_backlog,
+            urllc_sinr,
+        ),
+        "mMTC": make_slice(
+            mmtc_backlog,
+            mmtc_sinr,
+        ),
+    }

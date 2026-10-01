@@ -87,3 +87,13 @@ def interval_deadline_metrics(before, after):
         "misses": misses,
         "miss_ratio": ratio,
     }
+def collect_completion_delays(flows):
+    delays = []
+
+    for flow in flows:
+        delays.extend(
+            float(value)
+            for value in flow.completionDelays
+        )
+
+    return delays

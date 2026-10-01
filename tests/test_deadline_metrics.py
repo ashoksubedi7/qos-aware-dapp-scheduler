@@ -13,7 +13,9 @@ from metrics.deadline_metrics import (
     deadline_miss_ratio,
     delay_statistics,
 )
-
+from metrics.deadline_metrics import (
+    collect_completion_delays,
+)
 
 def make_flow(evaluated, misses, delays):
     return SimpleNamespace(
@@ -131,3 +133,26 @@ def test_interval_deadline_metrics_no_packets():
     assert interval["evaluated"] == 0
     assert interval["misses"] == 0
     assert interval["miss_ratio"] == 0.0
+def test_collect_completion_delays():
+    flow1 = SimpleNamespace(
+        completionDelays=[
+            1.0,
+            2.0,
+        ]
+    )
+
+    flow2 = SimpleNamespace(
+        completionDelays=[
+            3.0,
+        ]
+    )
+
+    delays = collect_completion_delays(
+        [flow1, flow2]
+    )
+
+    assert delays == [
+        1.0,
+        2.0,
+        3.0,
+    ]

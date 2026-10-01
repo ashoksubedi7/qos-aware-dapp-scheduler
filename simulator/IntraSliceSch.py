@@ -130,7 +130,12 @@ class IntraSliceScheduler:
                             if self.ues[tbl.ue].pendingPckts[pckt] == 0:
                                 if not self.findPackBeQ(tbl.ue, pckt):
                                     if tbl.type == "data":
-                                        self.ues[tbl.ue].packetFlows[0].deliveredPackets += 1
+                                        flow = self.ues[tbl.ue].packetFlows[0]
+
+                                        flow.recordDeliveryCompletion(
+                                            pckt,
+                                            self.env.now,
+                                        )
                                     self.printDebDataDM(
                                         '<p style="color:green"><b>'
                                         + tbl.ue

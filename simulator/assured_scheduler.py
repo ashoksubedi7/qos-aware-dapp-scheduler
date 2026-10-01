@@ -20,6 +20,29 @@ from common.action_space import (
 from metrics.service_metrics import starvation_penalty
 from metrics.transition_metrics import derive_transition_metrics
 from reward.assured_reward import compute_assured_reward
+from agent.dqn_agent import DQNAgent
+from assured_metrics import (
+    build_m1_state,
+    build_m2_state,
+    slice_backlog,
+    slice_mean_sinr,
+    slice_max_hol_delay,
+)
+from common.action_space import (
+    ACTION_SPACE_SIZE,
+    SLICE_ORDER,
+    get_action_weights,
+)
+
+from common.prb_allocation import (
+    percentage_action_to_numerology_prbs,
+    reference_prbs_used,
+)
+from config.experiment_config import ExperimentConfig
+from common.reproducibility import set_global_seed
+from metrics.normalization_diagnostics import (
+    NormalizationDiagnostics,
+)
 
 
 class AssuredScheduler(InterSliceScheduler):
@@ -46,9 +69,7 @@ class AssuredScheduler(InterSliceScheduler):
         dm,
         tdd,
         gr,
-        model_variant="M1",
-        urllc_deadline_ms=1.0,
-        starvation_threshold_ms=10.0,
+        config=None,
     ):
         super().__init__(
             ba,
@@ -58,73 +79,164 @@ class AssuredScheduler(InterSliceScheduler):
             gr,
         )
 
-        if model_variant not in self.VALID_VARIANTS:
-            raise ValueError(
-                f"Unknown model variant: {model_variant}"
+        if config is None:
+            config = ExperimentConfig(
+                control_interval_ms=gr
             )
 
-        if urllc_deadline_ms <= 0:
-            raise ValueError(
-                "URLLC deadline must be greater than zero"
+        if not isinstance(
+            config,
+            ExperimentConfig,
+        ):
+            raise TypeError(
+                "config must be an ExperimentConfig"
             )
 
-        if starvation_threshold_ms <= 0:
-            raise ValueError(
-                "Starvation threshold must be greater than zero"
-            )
+        self.config = config
 
-        self.model_variant = model_variant
-        self.model_definition = get_model_definition(
-            model_variant
+        set_global_seed(
+            self.config.seed
+        )
+
+        self.model_variant = (
+            self.config.model_variant
+        )
+
+        self.model_definition = (
+            get_model_definition(
+                self.model_variant
+            )
+        )
+
+        self.granularity = float(
+            self.config.control_interval_ms
         )
 
         self.urllc_deadline_ms = float(
-            urllc_deadline_ms
+            self.config.urllc_scheduling_deadline_ms
         )
 
         self.starvation_threshold_ms = float(
-            starvation_threshold_ms
+            self.config.starvation_threshold_ms
         )
 
         self.action_space_size = ACTION_SPACE_SIZE
 
+        self.agent = DQNAgent(
+            input_dim=self.model_definition[
+                "input_dim"
+            ],
+            action_dim=self.model_definition[
+                "output_dim"
+            ],
+            seed=self.config.seed,
+        )
+        self.normalization_diagnostics = (
+            NormalizationDiagnostics()
+        )
         self.embb_starvation_ms = 0.0
         self.mmtc_starvation_ms = 0.0
 
         self.action = 0
         self.reward = 0.0
 
+        self.last_requested_weights = None
+        self.last_slice_prbs = None
+        self.last_reference_prbs = None
+
     def build_state(self, now):
+        slices = self._canonical_slices()
+
+        common = {
+            "backlog_cap":
+                self.config.backlog_cap,
+            "sinr_min_db":
+                self.config.sinr_min_db,
+            "sinr_max_db":
+                self.config.sinr_max_db,
+        }
+
         if self.model_variant == "M1":
             return build_m1_state(
-                self.slices
+                slices,
+                **common,
             )
 
         return build_m2_state(
-            self.slices,
+            slices,
             now,
             self.urllc_deadline_ms,
+            **common,
         )
 
     def get_action_weights(self, action):
         return get_action_weights(action)
 
+    def record_normalization_diagnostics(
+        self,
+        now,
+    ):
+        slices = self._canonical_slices()
+
+        for name in (
+            "eMBB",
+            "URLLC",
+            "mMTC",
+        ):
+            slice_obj = slices[name]
+
+            backlog = slice_backlog(
+                slice_obj
+            )
+
+            sinr = slice_mean_sinr(
+                slice_obj
+            )
+
+            self.normalization_diagnostics.record_backlog(
+                backlog,
+                self.config.backlog_cap,
+            )
+
+            self.normalization_diagnostics.record_sinr(
+                sinr,
+                self.config.sinr_min_db,
+                self.config.sinr_max_db,
+            )
+
+        urllc_hol = slice_max_hol_delay(
+            slices["URLLC"],
+            now,
+        )
+
+        raw_urgency = (
+            float(urllc_hol)
+            / float(
+                self.config.urllc_scheduling_deadline_ms
+            )
+        )
+
+        self.normalization_diagnostics.record_urgency(
+            raw_urgency
+        )
+
     def snapshot_interval_state(self):
+        slices = self._canonical_slices()
         return {
             "eMBB": snapshot_slice_counters(
-                self.slices["eMBB"]
+                slices["eMBB"]
             ),
             "URLLC": snapshot_slice_counters(
-                self.slices["URLLC"]
+                slices["URLLC"]
             ),
             "mMTC": snapshot_slice_counters(
-                self.slices["mMTC"]
+                slices["mMTC"]
             ),
             "radio": snapshot_radio_counters(
-                self.slices
+                slices
             ),
             "deadline": snapshot_urllc_deadline(
-                self.slices["URLLC"]
+                slices["URLLC"]
             ),
         }
 
@@ -204,3 +316,191 @@ class AssuredScheduler(InterSliceScheduler):
             deadline_miss_ratio=outcomes.deadline_miss_ratio,
             starvation_penalty=starvation_value,
         )
+
+    def _find_slice_key(self, service):
+        matches = [
+            key
+            for key in self.slices
+            if service in key
+        ]
+
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected exactly one {service} slice, "
+                f"found {matches}"
+            )
+
+        return matches[0]
+
+    def _canonical_slices(self):
+        return {
+            "eMBB": self.slices[
+                self._find_slice_key("eMBB")
+            ],
+            "URLLC": self.slices[
+                self._find_slice_key("URLLC")
+            ],
+            "mMTC": self.slices[
+                self._find_slice_key("mMTC")
+            ],
+        }
+
+    def apply_action(self, action):
+        """
+        Convert a learned action into feasible per-slice PRB allocations.
+
+        The DQN chooses a percentage split in common reference-resource
+        units. This method performs only deterministic feasibility
+        conversion; it does not add QoS priorities or safety overrides.
+        """
+        slices = self._canonical_slices()
+
+        weights = tuple(
+            int(value)
+            for value in self.get_action_weights(action)
+        )
+
+        factors = tuple(
+            int(slices[name].numRefFactor)
+            for name in SLICE_ORDER
+        )
+
+        allocation = percentage_action_to_numerology_prbs(
+            total_reference_prbs=self.PRBs,
+            weights=weights,
+            num_ref_factors=factors,
+        )
+
+        for name, prbs in zip(
+            SLICE_ORDER,
+            allocation,
+        ):
+            slices[name].updateConfig(
+                int(prbs)
+            )
+
+        reference_allocation = tuple(
+            int(allocation[index])
+            * int(factors[index])
+            for index in range(len(SLICE_ORDER))
+        )
+
+        self.last_requested_weights = weights
+        self.last_slice_prbs = allocation
+        self.last_reference_prbs = reference_allocation
+
+        return {
+            "action": int(action),
+            "weights": weights,
+            "slice_prbs": allocation,
+            "reference_prbs": reference_allocation,
+            "reference_prbs_used": reference_prbs_used(
+                allocation,
+                factors,
+            ),
+            "reference_prbs_available": int(self.PRBs),
+        }
+
+    def _embb_target_mbps(self):
+        slices = self._canonical_slices()
+        embb = slices["eMBB"]
+
+        num_ues = len(
+            embb.schedulerDL.ues
+        )
+
+        return (
+            float(embb.reqThroughputDL)
+            * float(num_ues)
+        )
+
+    def select_policy_action(self, state):
+        return self.agent.select_action(
+            state,
+            explore=self.config.training_mode,
+        )
+
+    def resAlloc(self, env):
+        """
+        AssuredQoS inter-slice RL control loop.
+        """
+
+        while True:
+            if len(self.slices) < 3:
+                yield env.timeout(
+                    self.granularity
+                )
+                continue
+                
+            self.record_normalization_diagnostics(
+                env.now
+            )
+            state = np.asarray(
+                self.build_state(env.now),
+                dtype=np.float32,
+            )
+
+            before = (
+                self.snapshot_interval_state()
+            )
+
+            action = self.select_policy_action(
+                state,
+            )
+
+            self.action = int(action)
+
+            self.apply_action(
+                self.action
+            )
+
+            yield env.timeout(
+                self.granularity
+            )
+
+            after = (
+                self.snapshot_interval_state()
+            )
+
+            outcomes = self.derive_outcomes(
+                before,
+                after,
+                embb_target_mbps=(
+                    self._embb_target_mbps()
+                ),
+            )
+
+            starvation_value = (
+                self.update_starvation(
+                    before,
+                    after,
+                )
+            )
+
+            reward_components = (
+                self.compute_reward(
+                    outcomes,
+                    starvation_value,
+                )
+            )
+
+            self.reward = float(
+                reward_components.total
+            )
+
+            next_state = np.asarray(
+                self.build_state(env.now),
+                dtype=np.float32,
+            )
+
+            if self.config.training_mode:
+                self.agent.remember(
+                    state,
+                    self.action,
+                    self.reward,
+                    next_state,
+                    False,
+                )
+
+                self.agent.train_step()
+                self.agent.decay_epsilon()

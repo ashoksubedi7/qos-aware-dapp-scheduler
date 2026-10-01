@@ -10,8 +10,10 @@ SINR_MAX_DB = 35.0
 
 
 def slice_backlog(slice_obj):
-    """Return the number of packets currently waiting in bearer queues."""
-    return slice_obj.schedulerDL.updSumPcks()
+    """Return total DL packet backlog for a slice."""
+    return float(
+        slice_obj.schedulerDL.updSumPcks()
+    )
 
 
 def slice_mean_sinr(slice_obj):
@@ -27,8 +29,6 @@ def slice_mean_sinr(slice_obj):
     ]
 
     return float(np.mean(values))
-
-
 def slice_max_hol_delay(slice_obj, now):
     """Return the largest head-of-line waiting time across UEs."""
     max_hol = 0.0
@@ -48,79 +48,141 @@ def slice_max_hol_delay(slice_obj, now):
     return max_hol
 
 
-def normalize_backlog(backlog):
-    """Map queue backlog to [0, 1] using the original 500-packet cap."""
-    return float(
-        np.clip(
-            float(backlog) / BACKLOG_CAP,
-            0.0,
-            1.0,
+def normalize_backlog(
+    backlog,
+    cap=BACKLOG_CAP,
+):
+    if cap <= 0:
+        raise ValueError(
+            "backlog cap must be positive"
         )
+
+    return min(
+        max(float(backlog), 0.0),
+        float(cap),
+    ) / float(cap)
+
+
+def normalize_sinr(
+    sinr,
+    minimum=SINR_MIN_DB,
+    maximum=SINR_MAX_DB,
+):
+    if maximum <= minimum:
+        raise ValueError(
+            "SINR maximum must exceed minimum"
+        )
+
+    clipped = min(
+        max(float(sinr), float(minimum)),
+        float(maximum),
+    )
+
+    return (
+        clipped - float(minimum)
+    ) / (
+        float(maximum)
+        - float(minimum)
     )
 
 
-def normalize_sinr(sinr_db):
-    """Normalize FDD SINR to [0, 1] using the simulator MCS range."""
-    clipped = np.clip(
-        float(sinr_db),
-        SINR_MIN_DB,
-        SINR_MAX_DB,
-    )
-
-    return float(
-        (clipped - SINR_MIN_DB)
-        / (SINR_MAX_DB - SINR_MIN_DB)
-    )
-
-
-def normalize_urllc_urgency(hol_delay, deadline):
-    """Represent URLLC HoL as fraction of the scheduling deadline."""
+def normalize_urgency(
+    hol_delay,
+    deadline,
+):
     if deadline <= 0:
-        raise ValueError("URLLC deadline must be greater than zero")
-
-    return float(
-        np.clip(
-            float(hol_delay) / float(deadline),
-            0.0,
-            1.0,
+        raise ValueError(
+            "deadline must be positive"
         )
+
+    raw = (
+        float(hol_delay)
+        / float(deadline)
     )
 
-
-def build_m1_state(slices):
-    """Build normalized context-aware state."""
-    embb = slices["eMBB"]
-    urllc = slices["URLLC"]
-    mmtc = slices["mMTC"]
-
+    return min(
+        max(raw, 0.0),
+        1.0,
+    )
+def normalize_urllc_urgency(
+    hol_delay,
+    deadline,
+):
+    return normalize_urgency(
+        hol_delay,
+        deadline,
+    )    
+def build_m1_state(
+    slices,
+    backlog_cap=BACKLOG_CAP,
+    sinr_min_db=SINR_MIN_DB,
+    sinr_max_db=SINR_MAX_DB,
+):
     return np.array(
         [
-            normalize_backlog(slice_backlog(embb)),
-            normalize_backlog(slice_backlog(urllc)),
-            normalize_backlog(slice_backlog(mmtc)),
-            normalize_sinr(slice_mean_sinr(embb)),
-            normalize_sinr(slice_mean_sinr(urllc)),
-            normalize_sinr(slice_mean_sinr(mmtc)),
+            normalize_backlog(
+                slice_backlog(slices["eMBB"]),
+                backlog_cap,
+            ),
+            normalize_backlog(
+                slice_backlog(slices["URLLC"]),
+                backlog_cap,
+            ),
+            normalize_backlog(
+                slice_backlog(slices["mMTC"]),
+                backlog_cap,
+            ),
+            normalize_sinr(
+                slice_mean_sinr(slices["eMBB"]),
+                sinr_min_db,
+                sinr_max_db,
+            ),
+            normalize_sinr(
+                slice_mean_sinr(slices["URLLC"]),
+                sinr_min_db,
+                sinr_max_db,
+            ),
+            normalize_sinr(
+                slice_mean_sinr(slices["mMTC"]),
+                sinr_min_db,
+                sinr_max_db,
+            ),
         ],
         dtype=np.float32,
     )
 
 
-def build_m2_state(slices, now, urllc_deadline):
-    """Build normalized QoS-aware state with URLLC urgency."""
-    m1_state = build_m1_state(slices)
+def build_m2_state(
+    slices,
+    now,
+    urllc_deadline,
+    backlog_cap=BACKLOG_CAP,
+    sinr_min_db=SINR_MIN_DB,
+    sinr_max_db=SINR_MAX_DB,
+):
+    m1_state = build_m1_state(
+        slices,
+        backlog_cap=backlog_cap,
+        sinr_min_db=sinr_min_db,
+        sinr_max_db=sinr_max_db,
+    )
 
-    urllc_hol = slice_max_hol_delay(
+    hol_delay = slice_max_hol_delay(
         slices["URLLC"],
         now,
     )
 
     urgency = normalize_urllc_urgency(
-        urllc_hol,
+        hol_delay,
         urllc_deadline,
     )
 
-    return np.append(
-        m1_state,
-        np.float32(urgency),
+    return np.concatenate(
+        [
+            m1_state,
+            np.array(
+                [urgency],
+                dtype=np.float32,
+            ),
+        ]
     )

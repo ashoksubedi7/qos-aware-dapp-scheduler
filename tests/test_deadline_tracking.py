@@ -93,6 +93,113 @@ def test_packetflow_service_counters_start_zero():
 
     assert flow.deliveredPackets == 0
     assert flow.deliveredBytes == 0
+def test_completion_delay_is_measured_from_generation():
+    flow = PacketFlow(
+        1,
+        300,
+        0.6,
+        "ue1",
+        "DL",
+        "URLLC",
+        0,
+        1,
+        "Constant",
+        "Uniform",
+        1.0,
+    )
+
+    packet = Packet(
+        1,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet.tIn = 10.0
+
+    flow.recordSchedulingOutcome(
+        packet,
+        10.5,
+    )
+
+    delay = flow.recordDeliveryCompletion(
+        packet.secNum,
+        12.0,
+    )
+
+    assert delay == 2.0
+    assert flow.deliveredPackets == 1
+    assert flow.completionDelays == [2.0]
+
+
+def test_completion_is_recorded_only_once():
+    flow = PacketFlow(
+        1,
+        300,
+        0.6,
+        "ue1",
+        "DL",
+        "URLLC",
+        0,
+        1,
+        "Constant",
+        "Uniform",
+        1.0,
+    )
+
+    packet = Packet(
+        1,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet.tIn = 5.0
+
+    flow.recordSchedulingOutcome(
+        packet,
+        5.2,
+    )
+
+    first = flow.recordDeliveryCompletion(
+        packet.secNum,
+        6.0,
+    )
+
+    second = flow.recordDeliveryCompletion(
+        packet.secNum,
+        7.0,
+    )
+
+    assert first == 1.0
+    assert second is None
+
+    assert flow.deliveredPackets == 1
+    assert len(flow.completionDelays) == 1
+
+
+def test_completion_requires_known_packet():
+    flow = PacketFlow(
+        1,
+        300,
+        0.6,
+        "ue1",
+        "DL",
+        "URLLC",
+        0,
+        1,
+        "Constant",
+        "Uniform",
+        1.0,
+    )
+
+    result = flow.recordDeliveryCompletion(
+        999,
+        5.0,
+    )
+
+    assert result is None
+    assert flow.deliveredPackets == 0
     
     
     

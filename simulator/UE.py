@@ -237,6 +237,9 @@ class PacketFlow:
         self.schedulingDelays = []
         self.deliveredPackets = 0
         self.deliveredBytes = 0
+        self.packetGenerationTimes = {}
+        self.completedPacketIds = set()
+        self.completionDelays = []
 
     def recordSchedulingOutcome(self, packet, now):
         """Record first-scheduling delay exactly once per packet."""
@@ -244,6 +247,10 @@ class PacketFlow:
             return
         packet.scheduled_at = now
         packet.scheduling_delay = now - packet.tIn
+        self.packetGenerationTimes.setdefault(
+            packet.secNum,
+            packet.tIn,
+        )
         if packet.deadline is None:
             return
         self.deadlineEvaluated += 1
@@ -251,6 +258,50 @@ class PacketFlow:
         packet.deadline_missed = packet.scheduling_delay > packet.deadline
         if packet.deadline_missed:
             self.deadlineMisses += 1
+
+    def recordDeliveryCompletion(
+        self,
+        packet_id,
+        now,
+    ):
+        """
+        Record successful full-packet delivery exactly once.
+
+        Completion delay is measured from packet generation until the
+        final successful TB needed for that packet has been received.
+        """
+        packet_id = int(packet_id)
+
+        if packet_id in self.completedPacketIds:
+            return None
+
+        if packet_id not in self.packetGenerationTimes:
+            return None
+
+        completion_delay = (
+            float(now)
+            - float(
+                self.packetGenerationTimes[
+                    packet_id
+                ]
+            )
+        )
+
+        self.completedPacketIds.add(
+            packet_id
+        )
+
+        self.completionDelays.append(
+            completion_delay
+        )
+
+        self.deliveredPackets += 1
+
+        del self.packetGenerationTimes[
+            packet_id
+        ]
+
+        return completion_delay
 
     def setQosFId(self, q):
         self.qosFlowId = q
@@ -288,7 +339,6 @@ class PacketFlow:
         ueN = int(self.ue[2:])  # number of UEs in simulation
         self.tStart = random.expovariate(1.0) + tSim * self.activationTime
         yield env.timeout(self.tStart)  # each UE start transmission after tStart
-        # seq = [[elemento * tSim for elemento in sublista] for sublista in self.activationTime]
         while env.now < (tSim * self.deactivationTime * 0.83):
             self.sentPackets = self.sentPackets + 1
             size = self.getPsize()
@@ -324,47 +374,37 @@ class PacketFlow:
         The size is determined by the distribution specified in self.distributionSize.
         """
         if self.distributionSize == "Pareto":
-            # Generate a Pareto-distributed sample with shape parameter 1.2
             pSize = random.paretovariate(1.2) * (0.2 / 1.2) * 2 + self.packetSize
             return int(pSize)
         elif self.distributionSize == "Pareto2":
-            # Generate a Pareto-distributed sample with a specified mean and maximum value
             maximum = 700
             alpha = 1.2
             mean = self.packetSize
             size = 1
             k = (alpha - 1) * mean / maximum
 
-            # Generate Pareto samples
             pareto_samples = maximum * (np.random.pareto(alpha, size=size) + k)
-
-            # Truncate samples to maximum value
             truncated_samples = np.clip(pareto_samples, None, maximum)
 
             pSize = truncated_samples
             return int(pSize)
         elif self.distributionSize == "Lognormal":
-            # Generate a log-normal-distributed sample with a specified mean and standard deviation
             std = 1
             X = self.packetSize
             mu = np.log(X**2 / np.sqrt(X**2 + std**2))
             sigma = np.sqrt(np.log(1 + (std**2 / X**2)))
             pSize = np.random.lognormal(mu, sigma)
 
-            # Truncate samples to maximum value
             if pSize > self.sMax:
                 pSize = self.sMax
 
             return int(pSize)
         elif self.distributionSize == "Constant":
-            # Return a constant packet size
             return self.packetSize
         elif self.distributionSize == "Uniform":
-            # Generate a uniformly-distributed sample between packetSize and sMax
             pSize = random.uniform(self.packetSize, self.sMax)
             return int(pSize)
         elif self.distributionSize == "TruncatedNormal":
-            # Generate a truncated log-normal-distributed sample with a specified mean and standard deviation
             pSize = int(self.truncated_lognormal(self.packetSize, 3, 900))
             return pSize
         elif self.distributionSize == "Normal":
@@ -412,9 +452,6 @@ class PacketFlow:
             return pSize
         else:
             print("Error: Distribution size not defined.")
-            # pSize = self.packetSize
-            # self.sMed = self.sMed + pSize
-            # return pSize
 
     def getParrRate(self):
         if self.distributionArrival == "Constant":
@@ -423,7 +460,6 @@ class PacketFlow:
             pArrRate = random.paretovariate(1.2) * (
                 self.pckArrivalRate * (0.2 / 1.2)
             )
-            # pArrRate = self.tMax #random.paretovariate(1.2) * (self.pckArrivalRate * (0.2 / 1.2))
         elif self.distributionArrival == "Pareto2":
             maximum = 1.4
             alpha = 1.2
@@ -431,104 +467,69 @@ class PacketFlow:
             size = 1
             k = (alpha - 1) * mean / maximum
 
-            # Generate Pareto samples
             pareto_samples = maximum * (np.random.pareto(alpha, size=size) + k)
-
-            # Truncate samples
             truncated_samples = np.clip(pareto_samples, None, maximum)
             pArrRate = truncated_samples
             return int(pArrRate)
         elif self.distributionArrival == "Exponential":
-            # Generate a random value from an exponential distribution with the given arrival rate
             pArrRate = np.random.exponential(self.pckArrivalRate)
-            # If the generated value exceeds the maximum time limit, set it to the maximum
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Uniform":
-            # Generate a random value from a uniform distribution between 0 and the given arrival rate
             pArrRate = random.uniform(0, self.pckArrivalRate)
-            # If the generated value exceeds the maximum time limit, set it to the maximum
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Uniform2":
-            # Generate a random value from a uniform distribution between 0 and the given arrival rate, then add 0.5
             pArrRate = random.uniform(0, self.pckArrivalRate) + 0.5
         elif self.distributionArrival == "Normal":
-            # Generate a random value from a normal distribution with the given arrival rate and a standard deviation of 0.6
             pArrRate = abs(np.random.normal(self.pckArrivalRate, 0.6))
-            # If the generated value exceeds the maximum time limit, set it to the maximum
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
-            # Return the generated value
             return pArrRate
         elif self.distributionArrival == "Normal2":
-            # Generate a random value from a normal distribution with the given arrival rate and a standard deviation of 0.05
             pArrRate = abs(np.random.normal(self.pckArrivalRate, 0.05))
-            # If the generated value exceeds the maximum time limit, set it to the maximum
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
-            # Return the generated value
             return pArrRate
         elif self.distributionArrival == "Normal3":
-            # Generate a random value from a normal distribution with the given arrival rate and a standard deviation of 1
             pArrRate = abs(np.random.normal(self.pckArrivalRate, 1))
-            # If the generated value exceeds the maximum time limit, set it to the maximum
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
-            # Return the generated value
             return pArrRate
         elif self.distributionArrival == "Lognormal":
-            # Generate a random value from a lognormal distribution with the given arrival rate and a shape parameter of 0.722
             pArrRate = np.random.lognormal(self.pckArrivalRate, 0.722)
-            # If the generated value exceeds the maximum time limit, set it to the maximum
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Weibull":
-            # Generate a random value from a Weibull distribution with the given arrival rate
             pArrRate = np.random.weibull(self.pckArrivalRate)
-            # If the generated value exceeds the maximum time limit, set it to the maximum
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Beta":
-            # Generate a random variable using the beta distribution with parameters self.pckArrivalRate and 1
             pArrRate = np.random.beta(self.pckArrivalRate, 1)
-            # If the generated value is greater than the maximum allowed arrival rate, set it to the maximum
             if pArrRate > self.tMax:
-                pArrRate = self.tMax  # random.paretovariate(1.2) * (self.pckArrivalRate * (0.2 / 1.2))
+                pArrRate = self.tMax
         elif self.distributionArrival == "Gamma":
-            # Generate a random variable using the gamma distribution with parameters self.pckArrivalRate and 1
             pArrRate = np.random.gamma(self.pckArrivalRate, 1)
-            # If the generated value is greater than the maximum allowed arrival rate, set it to the maximum
             if pArrRate > self.tMax:
-                pArrRate = self.tMax  # random.paretovariate(1.2) * (self.pckArrivalRate * (0.2 / 1.2))
+                pArrRate = self.tMax
         elif self.distributionArrival == "Triangular":
-            # Generate a random variable using the triangular distribution with parameters 0, self.pckArrivalRate, and 1
             pArrRate = np.random.triangular(0, self.pckArrivalRate, 1)
-            # While the generated value is greater than the maximum allowed arrival rate, generate a new value
             while pArrRate > self.tMax:
                 pArrRate = np.random.triangular(0, self.pckArrivalRate, 1)
         elif self.distributionArrival == "Poisson":
-            # Generate a random variable using the Poisson distribution with parameter self.pckArrivalRate
             pArrRate = np.random.poisson(self.pckArrivalRate)
-            # While the generated value is greater than the maximum allowed arrival rate, generate a new value
             while pArrRate > self.tMax:
                 pArrRate = np.random.poisson(self.pckArrivalRate)
         elif self.distributionArrival == "Binomial":
-            # Generate a random variable using the binomial distribution with parameters 1 and self.pckArrivalRate
             pArrRate = np.random.binomial(1, self.pckArrivalRate)
-            # While the generated value is greater than the maximum allowed arrival rate, generate a new value
             while pArrRate > self.tMax:
                 pArrRate = np.random.binomial(1, self.pckArrivalRate)
         elif self.distributionArrival == "Geometric":
-            # Generate a random variable using the geometric distribution with parameter self.pckArrivalRate
             pArrRate = np.random.geometric(self.pckArrivalRate)
-            # While the generated value is greater than the maximum allowed arrival rate, generate a new value
             while pArrRate > self.tMax:
                 pArrRate = np.random.geometric(self.pckArrivalRate)
         elif self.distributionArrival == "NegativeBinomial":
-            # Generate a random variable using the negative binomial distribution with parameters 1 and self.pckArrivalRate
             pArrRate = np.random.negative_binomial(1, self.pckArrivalRate)
-            # While the generated value is greater than the maximum allowed arrival rate, generate a new value
             while pArrRate > self.tMax:
                 pArrRate = np.random.negative_binomial(1, self.pckArrivalRate)
 

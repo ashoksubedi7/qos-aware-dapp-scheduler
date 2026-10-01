@@ -13,6 +13,8 @@ from Scheds_Inter import *
 from Slice import *
 from vanilla import *
 from formal_vanilla_v2 import vanillaDQN_Scheduler as formalVanillaV2DQN_Scheduler
+from assured_scheduler import AssuredScheduler
+from config.experiment_config import ExperimentConfig
 
 # Cell Class: cell description
 
@@ -44,8 +46,47 @@ class Cell:
             self.interSliceSched = Apex_Scheduler(self.bw, fr, dm, tdd, gr)
         elif schInter[0:3] == "FV2":
             self.interSliceSched = formalVanillaV2DQN_Scheduler(
-        	self.bw, fr, dm, tdd, gr
-    	    )
+                self.bw, fr, dm, tdd, gr
+            )
+        elif schInter == "AQM1":
+            config = ExperimentConfig(
+                model_variant="M1",
+                control_interval_ms=gr,
+            )
+            self.interSliceSched = AssuredScheduler(
+                self.bw,
+                fr,
+                dm,
+                tdd,
+                gr,
+                config=config,
+            )
+        elif schInter == "AQM2":
+            config = ExperimentConfig(
+                model_variant="M2",
+                control_interval_ms=gr,
+            )
+            self.interSliceSched = AssuredScheduler(
+                self.bw,
+                fr,
+                dm,
+                tdd,
+                gr,
+                config=config,
+            )
+        elif schInter == "AQM3":
+            config = ExperimentConfig(
+                model_variant="M3",
+                control_interval_ms=gr,
+            )
+            self.interSliceSched = AssuredScheduler(
+                self.bw,
+                fr,
+                dm,
+                tdd,
+                gr,
+                config=config,
+            )
         elif schInter[0:2] == "VN":
             self.interSliceSched = vanillaDQN_Scheduler(self.bw, fr, dm, tdd, gr)
         else:
