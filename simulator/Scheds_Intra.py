@@ -915,7 +915,11 @@ class TDD_Scheduler(IntraSliceScheduler):  # TDD Sched ---------
         pks_s = 0
         list_p = []
         while pks_s < tbSize and len(self.ues[u].bearers[0].buffer.pckts) > 0:
-            pacD = self.ues[u].bearers[0].buffer.removePckt()
+            flow = self.ues[u].packetFlows[0]
+            flow.recordSchedulingOutcome(
+                pacD,
+                self.env.now,
+            )
             pks_s = pks_s + pacD.size
             list_p.append(pacD.secNum)
 

@@ -70,6 +70,8 @@ class IntraSliceScheduler:
         self.tbSize = 0
 
         self.rb_assigned = 0
+        self.assuredPrbsUsed = 0
+        self.assuredPrbsAvailable = 0
 
         self.tbsTable = loadtbsTable()
         
@@ -94,6 +96,7 @@ class IntraSliceScheduler:
             if len(self.queue.res) > 0:
                 for i in range(len(self.queue.res)):  # [0])):
                     tbl = self.queue.removeTB()
+                    self.assuredPrbsUsed += tbl.numRB
                     ue = tbl.ue
 
                     self.ues[ue].resUse = self.ues[ue].resUse + 1
@@ -112,18 +115,22 @@ class IntraSliceScheduler:
                         self.ues[ue].packetFlows[0].rcvdBytes = (
                             self.ues[ue].packetFlows[0].rcvdBytes + tbl.size
                         )
+                        flow = self.ues[ue].packetFlows[0]
+
+                        if tbl.type == "data":
+                            flow.deliveredBytes += tbl.size
                         self.ues[ue].TXedTB = self.ues[ue].TXedTB + 1
                         for pckt in tbl.pckt_l:
                             self.ues[tbl.ue].pendingPckts[pckt] = (
                                 self.ues[tbl.ue].pendingPckts[pckt] - 1
                             )
 
-                            # self.ues[tbl.ue].sndbytes  += tbl.size
+                            # self.ues[tbl.ue].sndbytes  
 
                             if self.ues[tbl.ue].pendingPckts[pckt] == 0:
-                                if not (
-                                    self.findPackBeQ(tbl.ue, pckt)
-                                ):  # Check if there is a piece of this packet in bearer buffer
+                                if not self.findPackBeQ(tbl.ue, pckt):
+                                    if tbl.type == "data":
+                                        self.ues[tbl.ue].packetFlows[0].deliveredPackets += 1
                                     self.printDebDataDM(
                                         '<p style="color:green"><b>'
                                         + tbl.ue
@@ -290,7 +297,13 @@ class IntraSliceScheduler:
             self.ues[u].insertPckt(pacD)
             pks_s = pks_s + pacD.size  # + 2
             
-            self.ues[u].delay = (self.env.now - pacD.tIn)
+            self.ues[u].delay = self.env.now - pacD.tIn
+
+            flow = self.ues[u].packetFlows[0]
+            flow.recordSchedulingOutcome(
+                pacD,
+                self.env.now,
+            )
             """
             self.ues[u].delay = 1 + (self.env.now - pacD.tIn)
             self.ues[u].throughput +=  pacD.size*8000/(1024*1024*self.ues[u].delay)

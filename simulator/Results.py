@@ -56,12 +56,14 @@ class UEgroup:
         measInterv,
         env,
         sinr,
+        schedulingDeadline=None
     ):
         self.activationTime = activationTime
         self.deactivationTime = deactivationTime
         self.distributionSize = distributionSize
         self.distributionArrival = distributionArrival
-
+        self.schedulingDeadline = schedulingDeadline
+        
         self.num_usersDL = nuDL
         self.num_usersUL = nuUL
         self.p_sizeDL = pszDL
@@ -102,7 +104,8 @@ class UEgroup:
                 self.activationTime,
                 self.deactivationTime,
                 self.distributionSize, 
-                self.distributionArrival
+                self.distributionArrival,
+                self.schedulingDeadline
             )
         if self.num_usersUL > 0:
             self.usersUL, self.flowsUL = self.initializeUEs(
@@ -118,7 +121,8 @@ class UEgroup:
                 self.activationTime,
                 self.deactivationTime,
                 self.distributionSize, 
-                self.distributionArrival
+                self.distributionArrival,
+                self.schedulingDeadline,
             )
 
     def setReq(self, delay, avl):
@@ -138,7 +142,7 @@ class UEgroup:
             self.sinr_0UL = initialSinrGenerator(self.num_usersUL, sinr)
 
     def initializeUEs(
-        self, dir, num_users, p_size, p_arr_rate, sinr_0, cell, t_sim, measInterv, env, activationTime, deactivationTime, distributionSize, distributionArrival
+        self, dir, num_users, p_size, p_arr_rate, sinr_0, cell, t_sim, measInterv, env, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline=None
     ):
         """This method creates the UEs with its traffic flows, and initializes the asociated PEM methods"""
         users = []
@@ -149,7 +153,7 @@ class UEgroup:
         for j in range(num_users):
             ue_name = "ue" + str(j + 1)  # +'-'+self.label
             users.append(UE(ue_name, float(sinr_0[j]), 0, 20))
-            flows.append(PacketFlow(1, p_size, p_arr_rate, ue_name, dir, self.label, activationTime, deactivationTime, distributionSize, distributionArrival))
+            flows.append(PacketFlow(1, p_size, p_arr_rate, ue_name, dir, self.label, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline))
             users[j].addPacketFlow(flows[j])
             users[j].packetFlows[0].setQosFId(1)
             # Flow, UE and RL PEM activation

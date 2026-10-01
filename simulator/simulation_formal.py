@@ -102,6 +102,7 @@ UEgroup1 = UEgroup(
     measInterv,
     env,
     "S37",
+    None,
 )
 
 UEgroup2 = UEgroup(
@@ -126,6 +127,7 @@ UEgroup2 = UEgroup(
     measInterv,
     env,
     "S37",
+    1.0,
 )
 
 UEgroup3 = UEgroup(
@@ -150,6 +152,7 @@ UEgroup3 = UEgroup(
     measInterv,
     env,
     "S37",
+    None,
 )
 
 UEgroups = [UEgroup1, UEgroup2, UEgroup3]
