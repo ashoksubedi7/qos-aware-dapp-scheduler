@@ -22,7 +22,7 @@ from config.experiment_config import ExperimentConfig
 class Cell:
     """Cell class has cell relative parameters and collect kpi ststistics."""
 
-    def __init__(self, i, b, fr, dm, mBue, tdd, gr, schInter):
+    def __init__(self, i, b, fr, dm, mBue, tdd, gr, schInter, experiment_config=None):
         """This method creates a cell instance.
 
         It initialices cell parameters and interSliceScheduler according to the algorithm specified on the sch attribute.
@@ -34,6 +34,7 @@ class Cell:
         self.maxBuffUE = mBue
         """Maximum bearer buffer size by UE, in bytes"""
         self.sch = schInter
+        self.experiment_config = experiment_config
         if schInter[0:3] == "RRp":
             self.interSliceSched = RRplus_Scheduler(self.bw, fr, dm, tdd, gr)
         elif schInter[0:2] == "PF":
@@ -48,44 +49,56 @@ class Cell:
             self.interSliceSched = formalVanillaV2DQN_Scheduler(
                 self.bw, fr, dm, tdd, gr
             )
-        elif schInter == "AQM1":
-            config = ExperimentConfig(
-                model_variant="M1",
-                control_interval_ms=gr,
+        elif schInter in (
+            "AQM1",
+            "AQM2",
+            "AQM3",
+        ):
+            expected_variant = {
+                "AQM1": "M1",
+                "AQM2": "M2",
+                "AQM3": "M3",
+            }[schInter]
+
+            if experiment_config is None:
+                experiment_config = ExperimentConfig(
+                    model_variant=expected_variant,
+                    control_interval_ms=gr,
+                )
+
+            if (
+                experiment_config.model_variant
+                != expected_variant
+            ):
+                raise ValueError(
+                    "scheduler/config mismatch: "
+                    f"{schInter} requires "
+                    f"{expected_variant}, but config "
+                    f"specifies "
+                    f"{experiment_config.model_variant}"
+                )
+
+            if (
+                experiment_config.control_interval_ms
+                != gr
+            ):
+                raise ValueError(
+                    "Cell granularity and "
+                    "ExperimentConfig control interval "
+                    "must match"
+                )
+
+            self.experiment_config = (
+                experiment_config
             )
+
             self.interSliceSched = AssuredScheduler(
                 self.bw,
                 fr,
                 dm,
                 tdd,
                 gr,
-                config=config,
-            )
-        elif schInter == "AQM2":
-            config = ExperimentConfig(
-                model_variant="M2",
-                control_interval_ms=gr,
-            )
-            self.interSliceSched = AssuredScheduler(
-                self.bw,
-                fr,
-                dm,
-                tdd,
-                gr,
-                config=config,
-            )
-        elif schInter == "AQM3":
-            config = ExperimentConfig(
-                model_variant="M3",
-                control_interval_ms=gr,
-            )
-            self.interSliceSched = AssuredScheduler(
-                self.bw,
-                fr,
-                dm,
-                tdd,
-                gr,
-                config=config,
+                config=experiment_config,
             )
         elif schInter[0:2] == "VN":
             self.interSliceSched = vanillaDQN_Scheduler(self.bw, fr, dm, tdd, gr)

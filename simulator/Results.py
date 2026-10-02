@@ -56,14 +56,15 @@ class UEgroup:
         measInterv,
         env,
         sinr,
-        schedulingDeadline=None
+        schedulingDeadline=None,
+        experiment_config=None,
     ):
         self.activationTime = activationTime
         self.deactivationTime = deactivationTime
         self.distributionSize = distributionSize
         self.distributionArrival = distributionArrival
         self.schedulingDeadline = schedulingDeadline
-        
+        self.experiment_config = experiment_config
         self.num_usersDL = nuDL
         self.num_usersUL = nuUL
         self.p_sizeDL = pszDL
@@ -105,7 +106,8 @@ class UEgroup:
                 self.deactivationTime,
                 self.distributionSize, 
                 self.distributionArrival,
-                self.schedulingDeadline
+                self.schedulingDeadline,
+                self.experiment_config,
             )
         if self.num_usersUL > 0:
             self.usersUL, self.flowsUL = self.initializeUEs(
@@ -123,6 +125,7 @@ class UEgroup:
                 self.distributionSize, 
                 self.distributionArrival,
                 self.schedulingDeadline,
+                self.experiment_config,
             )
 
     def setReq(self, delay, avl):
@@ -142,7 +145,7 @@ class UEgroup:
             self.sinr_0UL = initialSinrGenerator(self.num_usersUL, sinr)
 
     def initializeUEs(
-        self, dir, num_users, p_size, p_arr_rate, sinr_0, cell, t_sim, measInterv, env, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline=None
+        self, dir, num_users, p_size, p_arr_rate, sinr_0, cell, t_sim, measInterv, env, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline=None, experiment_config=None
     ):
         """This method creates the UEs with its traffic flows, and initializes the asociated PEM methods"""
         users = []
@@ -152,7 +155,18 @@ class UEgroup:
         procRL = []
         for j in range(num_users):
             ue_name = "ue" + str(j + 1)  # +'-'+self.label
-            users.append(UE(ue_name, float(sinr_0[j]), 0, 20))
+            users.append(
+                UE(
+                    ue_name,
+                    float(sinr_0[j]),
+                    0,
+                    20,
+                    experiment_config=experiment_config,
+                    slice_name=self.label,
+                    t_sim=t_sim,
+                    radio_update_interval=measInterv,
+                )
+            )
             flows.append(PacketFlow(1, p_size, p_arr_rate, ue_name, dir, self.label, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline))
             users[j].addPacketFlow(flows[j])
             users[j].packetFlows[0].setQosFId(1)

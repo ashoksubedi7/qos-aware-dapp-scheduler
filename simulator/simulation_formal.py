@@ -103,6 +103,7 @@ UEgroup1 = UEgroup(
     env,
     "S37",
     None,
+    experiment_config=cell1.experiment_config,
 )
 
 UEgroup2 = UEgroup(
@@ -128,6 +129,7 @@ UEgroup2 = UEgroup(
     env,
     "S37",
     1.0,
+    experiment_config=cell1.experiment_config,
 )
 
 UEgroup3 = UEgroup(
@@ -153,6 +155,7 @@ UEgroup3 = UEgroup(
     env,
     "S37",
     None,
+    experiment_config=cell1.experiment_config,
 )
 
 UEgroups = [UEgroup1, UEgroup2, UEgroup3]

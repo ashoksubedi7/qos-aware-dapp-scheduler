@@ -10,18 +10,18 @@ from scipy.stats import truncexpon
 from scipy.stats import uniform
 import numpy as np
 import simpy
-
+from environment.radio_scenarios import RadioScenario
 
 # UE class: terminal description
 class UE:
     """This class is used to model UE behaviour and relative properties"""
 
-    def __init__(self, i, ue_sinr0, p, npM):
+    def __init__(self, i, ue_sinr0, p, npM, experiment_config=None, slice_name=None, t_sim=None, radio_update_interval=None):
         self.id = i
         self.state = "RRC-IDLE"
         self.packetFlows = []
         self.bearers = []
-        self.radioLinks = RadioLink(1, ue_sinr0, self.id)
+        self.radioLinks = RadioLink(1, ue_sinr0, self.id, experiment_config=experiment_config, slice_name=slice_name, t_sim=t_sim, update_interval=radio_update_interval)
         self.TBid = 1
         self.pendingPckts = {}
         self.prbs = p
@@ -606,13 +606,57 @@ class PcktQueue:
 class RadioLink:
     """This class is used to model radio link properties and behaviour."""
 
-    def __init__(self, i, lq_0, u):
+    def __init__(
+        self,
+        i,
+        lq_0,
+        u,
+        experiment_config=None,
+        slice_name=None,
+        t_sim=None,
+        update_interval=None,
+    ):
         self.id = i
-        state = "ON"
-        self.linkQuality = lq_0
+        self.state = "ON"
+        self.linkQuality = float(lq_0)
         self.ue = u
         self.totCount = 0
-        self.maxVar = 0  # 0.1
+        self.maxVar = 0
+
+        # None means legacy simulator radio behavior.
+        self.radio_scenario = None
+
+        if experiment_config is not None:
+            if slice_name is None:
+                raise ValueError(
+                    "slice_name is required when "
+                    "experiment_config is supplied"
+                )
+
+            if t_sim is None:
+                raise ValueError(
+                    "t_sim is required when "
+                    "experiment_config is supplied"
+                )
+
+            if update_interval is None:
+                raise ValueError(
+                    "update_interval is required when "
+                    "experiment_config is supplied"
+                )
+
+            self.radio_scenario = RadioScenario(
+                scenario=experiment_config.radio_scenario,
+                experiment_seed=experiment_config.seed,
+                slice_name=slice_name,
+                ue_id=u,
+                simulation_time_ms=t_sim,
+                update_interval_ms=update_interval,
+            )
+
+            self.linkQuality = (
+                self.radio_scenario.initial_sinr()
+            )
 
     def updateLQ(self, env, udIntrv, tSim, fl, u, r):
         """This method updates UE link quality in terms of SINR during the simulation. This is a PEM method.
@@ -620,10 +664,35 @@ class RadioLink:
         """
         while env.now < (tSim * 0.83):
             yield env.timeout(udIntrv)
-            deltaSINR = random.normalvariate(0, self.maxVar)
-            while deltaSINR > self.maxVar or deltaSINR < (0 - self.maxVar):
-                deltaSINR = random.normalvariate(0, self.maxVar)
-            self.linkQuality = self.linkQuality + deltaSINR
+
+            if self.radio_scenario is not None:
+                self.linkQuality = (
+                    self.radio_scenario.sinr_at(
+                        env.now
+                    )
+                )
+                continue
+
+            deltaSINR = random.normalvariate(
+                0,
+                self.maxVar,
+            )
+
+            while (
+                deltaSINR > self.maxVar
+                or deltaSINR < -self.maxVar
+            ):
+                deltaSINR = (
+                    random.normalvariate(
+                        0,
+                        self.maxVar,
+                    )
+                )
+
+            self.linkQuality = (
+                self.linkQuality
+                + deltaSINR
+            )
 
 
 class Format:
