@@ -119,18 +119,53 @@ class IntraSliceScheduler:
 
                         if tbl.type == "data":
                             flow.deliveredBytes += tbl.size
-                        self.ues[ue].TXedTB = self.ues[ue].TXedTB + 1
+                            if flow.experiment_config is not None:
+                                if (
+                                    flow.activeMeasurementEndTime
+                                    is None
+                                ):
+                                    raise RuntimeError(
+                                        "active measurement boundary "
+                                        "was not initialized"
+                                    )
+
+                                if (
+                                    self.env.now
+                                    < flow.activeMeasurementEndTime
+                                ):
+                                    flow.activeDeliveredBytes += (
+                                        tbl.size
+                                    )
+                                else:
+                                    flow.drainDeliveredBytes += (
+                                        tbl.size
+                                    )
+
+                        self.ues[ue].TXedTB = (
+                            self.ues[ue].TXedTB
+                            + 1
+                        )
+
                         for pckt in tbl.pckt_l:
                             self.ues[tbl.ue].pendingPckts[pckt] = (
-                                self.ues[tbl.ue].pendingPckts[pckt] - 1
+                                self.ues[tbl.ue].pendingPckts[pckt]
+                                - 1
                             )
 
-                            # self.ues[tbl.ue].sndbytes
-
-                            if self.ues[tbl.ue].pendingPckts[pckt] == 0:
-                                if not self.findPackBeQ(tbl.ue, pckt):
+                            if (
+                                self.ues[tbl.ue]
+                                .pendingPckts[pckt]
+                                == 0
+                            ):
+                                if not self.findPackBeQ(
+                                    tbl.ue,
+                                    pckt,
+                                ):
                                     if tbl.type == "data":
-                                        flow = self.ues[tbl.ue].packetFlows[0]
+                                        flow = (
+                                            self.ues[tbl.ue]
+                                            .packetFlows[0]
+                                        )
 
                                         if (
                                             int(pckt)
@@ -140,6 +175,7 @@ class IntraSliceScheduler:
                                                 pckt,
                                                 self.env.now,
                                             )
+
                                     self.printDebDataDM(
                                         '<p style="color:green"><b>'
                                         + tbl.ue
@@ -148,14 +184,18 @@ class IntraSliceScheduler:
                                         + " Served ---------"
                                         + "</b></p>"
                                     )
-                                    del self.ues[tbl.ue].pendingPckts[pckt]
 
-                        # self.ues[tbl.ue].traffic_s = tbl.size*8000/(1024*1024)
+                                    del (
+                                        self.ues[tbl.ue]
+                                        .pendingPckts[pckt]
+                                    )
 
-                        self.ues[tbl.ue].sndbytes += tbl.size
-                        # print('UE: ',tbl.ue,' TB: ',tbl.id,' Size: ',tbl.size,' Bytes')
+                        self.ues[tbl.ue].sndbytes += (
+                            tbl.size
+                        )
+                            # print('UE: ',tbl.ue,' TB: ',tbl.id,' Size: ',tbl.size,' Bytes')
 
-                        # self.rcvdBytesIgr += tbl.size
+                            # self.rcvdBytesIgr += tbl.size
                     else:  # Lost TB -> queue in pendingTB
                         self.printDebDataDM(
                             '<p style="color:red">'

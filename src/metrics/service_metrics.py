@@ -35,7 +35,10 @@ def throughput_mbps(
         float(delivered_bytes)
         * 8.0
         * 1000.0
-        / (float(interval_ms) * 1024.0 * 1024.0)
+        / (
+            float(interval_ms)
+            * 1_000_000.0
+        )
     )
 
 

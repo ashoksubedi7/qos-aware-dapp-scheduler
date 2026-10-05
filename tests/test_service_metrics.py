@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-
+import pytest
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,21 +43,27 @@ def test_packet_service_ratio_clips():
 
 def test_throughput_mbps():
     value = throughput_mbps(
-        delivered_bytes=1024 * 1024,
+        delivered_bytes=1_000_000,
         interval_ms=1000,
     )
 
-    assert np.isclose(value, 8.0)
+    assert np.isclose(
+        value,
+        8.0,
+    )
 
 
 def test_normalized_throughput_service():
     value = normalized_throughput_service(
-        delivered_bytes=1024 * 1024,
+        delivered_bytes=1_000_000,
         interval_ms=1000,
         target_mbps=16.0,
     )
 
-    assert np.isclose(value, 0.5)
+    assert np.isclose(
+        value,
+        0.5,
+    )
 
 
 def test_prb_utilization():
@@ -101,3 +107,43 @@ def test_starvation_resets_after_service():
 
     assert duration == 0.0
     assert penalty == 0.0
+def test_throughput_mbps_uses_si_units():
+    # 1,000,000 bits in 1 second = 1 Mbps.
+    delivered_bytes = 125_000
+    interval_ms = 1000.0
+
+    value = throughput_mbps(
+        delivered_bytes,
+        interval_ms,
+    )
+
+    assert value == pytest.approx(
+        1.0
+    )
+
+def test_throughput_mbps_rejects_nonpositive_interval():
+    with pytest.raises(ValueError):
+        throughput_mbps(
+            delivered_bytes=1000,
+            interval_ms=0,
+        )
+def test_throughput_mbps_uses_si_units():
+    value = throughput_mbps(
+        delivered_bytes=125_000,
+        interval_ms=1000.0,
+    )
+
+    assert value == pytest.approx(
+        1.0
+    )
+
+
+def test_throughput_mbps_scales_with_interval():
+    value = throughput_mbps(
+        delivered_bytes=250_000,
+        interval_ms=500.0,
+    )
+
+    assert value == pytest.approx(
+        4.0
+    )

@@ -30,7 +30,7 @@ def test_transition_metrics():
     embb_after = SliceCounters(
         generated_packets=110,
         delivered_packets=90,
-        delivered_bytes=1024 * 1024,
+        delivered_bytes=1_000_000,
         backlog=8,
     )
 

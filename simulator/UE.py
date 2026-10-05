@@ -276,6 +276,9 @@ class PacketFlow:
         self.schedulingDelays = []
         self.deliveredPackets = 0
         self.deliveredBytes = 0
+        self.activeDeliveredBytes = 0
+        self.drainDeliveredBytes = 0
+        self.activeMeasurementEndTime = None
 
         # Packet lifecycle accounting.
         self.generatedPacketIds = set()
@@ -466,6 +469,52 @@ class PacketFlow:
     def multiply(self, seq, factor):
         return [x * factor for x in seq]
 
+    def getActiveMeasurementEndTime(
+        self,
+        tSim,
+    ):
+        """
+        Return the end of the experiment's active
+        measurement window.
+
+        For legacy simulations this preserves the
+        historical 0.83 boundary.
+
+        For AssuredQoS this is the start of the
+        explicit drain interval.
+        """
+
+        tSim = float(tSim)
+
+        if tSim <= 0:
+            raise ValueError(
+                "tSim must be greater "
+                "than zero"
+            )
+
+        if self.experiment_config is None:
+            return (
+                tSim
+                * 0.83
+            )
+
+        drain_duration = float(
+            self.experiment_config
+            .drain_duration_ms
+        )
+
+        if drain_duration >= tSim:
+            raise ValueError(
+                "drain_duration_ms must be "
+                "smaller than tSim"
+            )
+
+        return (
+            tSim
+            - drain_duration
+        )
+
+
     def getTrafficEndTime(
         self,
         tSim,
@@ -473,17 +522,9 @@ class PacketFlow:
         """
         Return the time at which this flow stops
         generating new application packets.
-
-        Legacy simulations preserve the historical
-        0.83 multiplier.
-
-        AssuredQoS simulations use an explicit drain
-        interval at the end of the simulation.
         """
 
-        tSim = float(
-            tSim
-        )
+        tSim = float(tSim)
 
         if tSim <= 0:
             raise ValueError(
@@ -498,23 +539,10 @@ class PacketFlow:
                 * 0.83
             )
 
-        drain_duration = float(
-            self.experiment_config
-            .drain_duration_ms
-        )
-
-        if (
-            drain_duration
-            >= tSim
-        ):
-            raise ValueError(
-                "drain_duration_ms must be "
-                "smaller than tSim"
-        )
-
-        experiment_traffic_end = (
-            tSim
-            - drain_duration
+        active_end = (
+            self.getActiveMeasurementEndTime(
+                tSim
+            )
         )
 
         flow_end = (
@@ -524,12 +552,24 @@ class PacketFlow:
 
         return min(
             flow_end,
-            experiment_traffic_end,
+            active_end,
         )
 
     def queueAppPckt(self, env, tSim):  # --- PEM -----
         """This method creates packets according to the packet flow traffic profile and stores them in the application buffer."""
         ueN = int(self.ue[2:])  # number of UEs in simulation
+        self.activeMeasurementEndTime = (
+            self.getActiveMeasurementEndTime(
+                tSim
+            )
+        )
+
+        end_time = (
+            self.getTrafficEndTime(
+                tSim
+            )
+        )
+
         self.tStart = (
             self.py_rng.expovariate(
                 1.0
@@ -537,13 +577,10 @@ class PacketFlow:
             + tSim
             * self.activationTime
         )
-        yield env.timeout(self.tStart)  # each UE start transmission after tStart
-        end_time = (
-            self.getTrafficEndTime(
-                tSim
-            )
-        )
 
+        yield env.timeout(
+            self.tStart
+        )
         while env.now < end_time:
             self.sentPackets = self.sentPackets + 1
             size = self.getPsize()
@@ -777,7 +814,7 @@ class PacketFlow:
 
         return pArrRate
 
-    def setMeassures(self, tsim):
+    def setMeassures(self, tSim):
         """
         Calculate average PLR and throughput
         for the simulation.
@@ -803,7 +840,7 @@ class PacketFlow:
         else:
             duration_factor = 1.0
 
-        if tsim > 1000:
+        if tSim > 1000:
             self.meassuredKPI[
                 "Throughput"
             ] = (
@@ -813,7 +850,7 @@ class PacketFlow:
                 * 8000
             ) / (
                 duration_factor
-                * tsim
+                * tSim
                 * 1024
                 * 1024
             )
