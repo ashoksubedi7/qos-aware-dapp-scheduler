@@ -74,7 +74,7 @@ class IntraSliceScheduler:
         self.assuredPrbsAvailable = 0
 
         self.tbsTable = loadtbsTable()
-        
+
     def queuesOut(self, env):  # ---------- PEM -------------
         """This method manages the scheduler TB queue. This is a PEM method.
 
@@ -125,17 +125,21 @@ class IntraSliceScheduler:
                                 self.ues[tbl.ue].pendingPckts[pckt] - 1
                             )
 
-                            # self.ues[tbl.ue].sndbytes  
+                            # self.ues[tbl.ue].sndbytes
 
                             if self.ues[tbl.ue].pendingPckts[pckt] == 0:
                                 if not self.findPackBeQ(tbl.ue, pckt):
                                     if tbl.type == "data":
                                         flow = self.ues[tbl.ue].packetFlows[0]
 
-                                        flow.recordDeliveryCompletion(
-                                            pckt,
-                                            self.env.now,
-                                        )
+                                        if (
+                                            int(pckt)
+                                            not in flow.droppedPacketIds
+                                        ):
+                                            flow.recordDeliveryCompletion(
+                                                pckt,
+                                                self.env.now,
+                                            )
                                     self.printDebDataDM(
                                         '<p style="color:green"><b>'
                                         + tbl.ue
@@ -204,7 +208,7 @@ class IntraSliceScheduler:
             self.rb_lim = self.nrbUEmax * self.nlayers  # max allocated RB/TTI
         else:
             self.rb_lim = self.nrbUEmax
-        
+
         while (
             len(self.ueLst) > 0
             and packts > 0
@@ -217,7 +221,7 @@ class IntraSliceScheduler:
             )  # print more info in debbug mode
             if self.ues[ue].prbs > 0:
                 if len(self.ues[ue].bearers) > 0 and rb < self.rb_assigned:#self.rb_lim:
-                    
+
                     if len(self.ues[ue].pendingTB) == 0:  # No TB to reTX
                         rb = rb + self.rrcUncstSigIn(ue)
                         if rb < self.rb_lim:
@@ -301,7 +305,7 @@ class IntraSliceScheduler:
             pacD = self.ues[u].bearers[0].buffer.removePckt()
             self.ues[u].insertPckt(pacD)
             pks_s = pks_s + pacD.size  # + 2
-            
+
             self.ues[u].delay = self.env.now - pacD.tIn
 
             flow = self.ues[u].packetFlows[0]
@@ -335,26 +339,112 @@ class IntraSliceScheduler:
         self.ues[u].utilization_list.append(current_utilization)
         return sum(self.ues[u].utilization_list) / len(self.ues[u].utilization_list)
 
-    def retransmitTB(self, u):
-        pendingTbl = self.ues[u].pendingTB[0]
-        if pendingTbl.reTxNum < 3000:  # TB retransmission
-            intd = self.queue.insertTB(pendingTbl)
-            self.ues[u].pendingTB.pop(0)
-            pendingTbl.reTxNum = pendingTbl.reTxNum + 1
-            r = self.ues[u].prbs
-        else:
-            self.ues[u].pendingTB.pop(0)  # Drop!!!
-            r = 0
-        return r
+    def _record_permanent_tb_drop(
+        self,
+        u,
+        tb,
+    ):
+        ue = self.ues[u]
 
-    def resAlloc(self, Nrb):
-        """This method allocates cell PRBs to the different connected UEs."""
-        print(2)
-        pass
+        if tb.type != "data":
+            return
 
-    ##########################################################
+        flow = ue.packetFlows[0]
 
-#------------------------------>
+        for packet_id in set(
+            tb.pckt_l
+        ):
+            packet_id = int(
+                packet_id
+            )
+
+            if (
+                packet_id
+                in ue.pendingPckts
+            ):
+                ue.pendingPckts[
+                    packet_id
+                ] -= 1
+
+                if (
+                    ue.pendingPckts[
+                        packet_id
+                    ]
+                    < 0
+                ):
+                    raise RuntimeError(
+                        "negative pending packet "
+                        f"count for packet "
+                        f"{packet_id}"
+                    )
+
+                if (
+                    ue.pendingPckts[
+                        packet_id
+                    ]
+                    == 0
+                ):
+                    del ue.pendingPckts[
+                        packet_id
+                    ]
+
+            if (
+                packet_id
+                in flow.generatedPacketIds
+            ):
+                flow.recordPacketDrop(
+                    packet_id
+                )
+
+    def retransmitTB(
+        self,
+        u,
+    ):
+        pending_tb = (
+            self.ues[
+                u
+            ].pendingTB[0]
+        )
+
+        if (
+            pending_tb.reTxNum
+            < 3000
+        ):
+            inserted = (
+                self.queue.insertTB(
+                    pending_tb
+                )
+            )
+
+            if inserted:
+                self.ues[
+                    u
+                ].pendingTB.pop(
+                    0
+                )
+
+                pending_tb.reTxNum += 1
+
+                return self.ues[
+                    u
+                ].prbs
+
+            return 0
+
+        dropped_tb = (
+            self.ues[
+                u
+            ].pendingTB.pop(
+                0
+            )
+        )
+
+        self._record_permanent_tb_drop(
+            u,
+            dropped_tb,
+        )
+
+        return 0
 
     def setMod(self, u, nprb):  # AMC
         """This method sets the MCS and TBS for each TB."""
@@ -403,7 +493,7 @@ class IntraSliceScheduler:
             tbs = getTbs(Ninfo,r)
         else:
             Ninfo = Nre__ * nprb * r * qm
-            
+
             tbs = getTbs(Ninfo,r)
 
         #print("tbs, ninfo, r, qm, nprb, Nre__, self.nlayers: ", tbs, Ninfo, r, qm, nprb, Nre__, self.nlayers)
@@ -416,15 +506,48 @@ class IntraSliceScheduler:
     def insertTB(self, id, m, uu, type, pack_lst, n, s):
         tb = TransportBlock(id, m, uu, type, pack_lst, n, s)
         succ = self.queue.insertTB(tb)
-        if not (uu == "Broadcast"):
-            self.ues[uu].TBid = self.ues[uu].TBid + 1  # Only if can insert the TB
+        tb = TransportBlock(
+        id,
+        m,
+        uu,
+        type,
+        pack_lst,
+        n,
+        s,
+    )
+
+        succ = self.queue.insertTB(
+            tb
+        )
+
+        if (
+            succ
+            and uu != "Broadcast"
+        ):
+            self.ues[
+                uu
+            ].TBid += 1
+
             for pack in pack_lst:
-                if list(self.ues[uu].pendingPckts.keys()).count(pack) > 0:
-                    self.ues[uu].pendingPckts[pack] = (
-                        self.ues[uu].pendingPckts[pack] + 1
-                    )
+                if (
+                    pack
+                    in self.ues[
+                        uu
+                    ].pendingPckts
+                ):
+                    self.ues[
+                        uu
+                    ].pendingPckts[
+                        pack
+                    ] += 1
+
                 else:
-                    self.ues[uu].pendingPckts[pack] = 1
+                    self.ues[
+                        uu
+                    ].pendingPckts[
+                        pack
+                    ] = 1
+
         return succ
 
     # Print methods -----------------------------------------

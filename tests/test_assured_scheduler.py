@@ -1,14 +1,34 @@
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
 import numpy as np
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
-sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "simulator"))
-sys.path.insert(0, str(ROOT / "simulator" / "lib"))
+sys.path.insert(
+    0,
+    str(ROOT / "src"),
+)
+
+sys.path.insert(
+    0,
+    str(ROOT / "simulator"),
+)
+
+sys.path.insert(
+    0,
+    str(ROOT / "simulator" / "lib"),
+)
+
 
 from assured_scheduler import AssuredScheduler
+
+from config.experiment_config import (
+    ExperimentConfig,
+)
 
 
 def test_valid_model_variants():
@@ -33,19 +53,20 @@ def test_m2_definition():
     }
 
     assert definition["input_dim"] == 7
-from types import SimpleNamespace
-import pytest
 
 
 def make_scheduler_without_init():
     scheduler = object.__new__(
         AssuredScheduler
     )
+
     return scheduler
 
 
 def test_find_slice_key_exact_names():
-    scheduler = make_scheduler_without_init()
+    scheduler = (
+        make_scheduler_without_init()
+    )
 
     scheduler.slices = {
         "eMBB": SimpleNamespace(),
@@ -53,13 +74,18 @@ def test_find_slice_key_exact_names():
         "mMTC": SimpleNamespace(),
     }
 
-    assert scheduler._find_slice_key(
-        "URLLC"
-    ) == "URLLC"
+    assert (
+        scheduler._find_slice_key(
+            "URLLC"
+        )
+        == "URLLC"
+    )
 
 
 def test_find_slice_key_extended_labels():
-    scheduler = make_scheduler_without_init()
+    scheduler = (
+        make_scheduler_without_init()
+    )
 
     scheduler.slices = {
         "eMBB-1": SimpleNamespace(),
@@ -67,17 +93,25 @@ def test_find_slice_key_extended_labels():
         "mMTC-30ue": SimpleNamespace(),
     }
 
-    assert scheduler._find_slice_key(
-        "eMBB"
-    ) == "eMBB-1"
+    assert (
+        scheduler._find_slice_key(
+            "eMBB"
+        )
+        == "eMBB-1"
+    )
 
-    assert scheduler._find_slice_key(
-        "URLLC"
-    ) == "URLLC-critical"
+    assert (
+        scheduler._find_slice_key(
+            "URLLC"
+        )
+        == "URLLC-critical"
+    )
 
 
 def test_duplicate_service_slice_is_rejected():
-    scheduler = make_scheduler_without_init()
+    scheduler = (
+        make_scheduler_without_init()
+    )
 
     scheduler.slices = {
         "URLLC-1": SimpleNamespace(),
@@ -93,16 +127,37 @@ def test_duplicate_service_slice_is_rejected():
         scheduler._find_slice_key(
             "URLLC"
         )
+
+
 def test_model_variants_are_distinct():
-    assert "M1" in AssuredScheduler.VALID_VARIANTS
-    assert "M2" in AssuredScheduler.VALID_VARIANTS
-    assert "M3" in AssuredScheduler.VALID_VARIANTS
+    assert (
+        "M1"
+        in AssuredScheduler.VALID_VARIANTS
+    )
+
+    assert (
+        "M2"
+        in AssuredScheduler.VALID_VARIANTS
+    )
+
+    assert (
+        "M3"
+        in AssuredScheduler.VALID_VARIANTS
+    )
+
+
 class FakeSlice:
-    def __init__(self, factor):
+    def __init__(
+        self,
+        factor,
+    ):
         self.numRefFactor = factor
         self.last_prbs = None
 
-    def updateConfig(self, prbs):
+    def updateConfig(
+        self,
+        prbs,
+    ):
         self.last_prbs = prbs
 
 
@@ -129,7 +184,9 @@ def make_action_scheduler():
 def test_apply_action_preserves_reference_budget():
     scheduler = make_action_scheduler()
 
-    result = scheduler.apply_action(16)
+    result = scheduler.apply_action(
+        16
+    )
 
     assert result["weights"] == (
         60,
@@ -143,14 +200,18 @@ def test_apply_action_preserves_reference_budget():
         10,
     )
 
-    assert result["reference_prbs"] == (
+    assert result[
+        "reference_prbs"
+    ] == (
         30,
         12,
         10,
     )
 
     assert (
-        result["reference_prbs_used"]
+        result[
+            "reference_prbs_used"
+        ]
         == 52
     )
 
@@ -158,20 +219,28 @@ def test_apply_action_preserves_reference_budget():
 def test_apply_action_updates_slice_configuration():
     scheduler = make_action_scheduler()
 
-    scheduler.apply_action(16)
+    scheduler.apply_action(
+        16
+    )
 
     assert (
-        scheduler.slices["eMBB"].last_prbs
+        scheduler.slices[
+            "eMBB"
+        ].last_prbs
         == 30
     )
 
     assert (
-        scheduler.slices["URLLC"].last_prbs
+        scheduler.slices[
+            "URLLC"
+        ].last_prbs
         == 3
     )
 
     assert (
-        scheduler.slices["mMTC"].last_prbs
+        scheduler.slices[
+            "mMTC"
+        ].last_prbs
         == 10
     )
 
@@ -179,7 +248,9 @@ def test_apply_action_updates_slice_configuration():
 def test_idle_action_really_allocates_zero():
     scheduler = make_action_scheduler()
 
-    result = scheduler.apply_action(0)
+    result = scheduler.apply_action(
+        0
+    )
 
     assert result["slice_prbs"] == (
         0,
@@ -188,9 +259,13 @@ def test_idle_action_really_allocates_zero():
     )
 
     assert (
-        result["reference_prbs_used"]
+        result[
+            "reference_prbs_used"
+        ]
         == 0
     )
+
+
 def test_embb_target_uses_number_of_ues():
     scheduler = object.__new__(
         AssuredScheduler
@@ -214,7 +289,10 @@ def test_embb_target_uses_number_of_ues():
         "mMTC": SimpleNamespace(),
     }
 
-    assert scheduler._embb_target_mbps() == 10.0
+    assert (
+        scheduler._embb_target_mbps()
+        == 10.0
+    )
 
 
 def test_agent_action_space_matches_model_output():
@@ -223,18 +301,17 @@ def test_agent_action_space_matches_model_output():
     )
 
     scheduler.model_definition = {
-        "output_dim": 22
+        "output_dim": 22,
     }
 
     scheduler.action_space_size = 22
 
     assert (
-        scheduler.model_definition["output_dim"]
+        scheduler.model_definition[
+            "output_dim"
+        ]
         == scheduler.action_space_size
     )
-from config.experiment_config import (
-    ExperimentConfig,
-)
 
 
 def test_scheduler_uses_config_values():
@@ -255,16 +332,31 @@ def test_scheduler_uses_config_values():
         config=config,
     )
 
-    assert scheduler.model_variant == "M2"
-    assert scheduler.granularity == 2.0
-    assert scheduler.urllc_deadline_ms == 1.5
-    assert scheduler.starvation_threshold_ms == 15.0
+    assert (
+        scheduler.model_variant
+        == "M2"
+    )
+
+    assert (
+        scheduler.granularity
+        == 2.0
+    )
+
+    assert (
+        scheduler.urllc_deadline_ms
+        == 1.5
+    )
+
+    assert (
+        scheduler.starvation_threshold_ms
+        == 15.0
+    )
 
 
 def test_scheduler_rejects_non_config():
-    import pytest
-
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+    ):
         AssuredScheduler(
             [10],
             "FR1",
@@ -277,11 +369,11 @@ def test_scheduler_rejects_non_config():
 
 def test_agent_uses_config_seed():
     config_a = ExperimentConfig(
-        seed=33
+        seed=33,
     )
 
     config_b = ExperimentConfig(
-        seed=33
+        seed=33,
     )
 
     scheduler_a = AssuredScheduler(
@@ -307,6 +399,8 @@ def test_agent_uses_config_seed():
         ==
         scheduler_b.agent.rng.random()
     )
+
+
 def test_training_mode_enables_exploration():
     config = ExperimentConfig(
         training_mode=True,
@@ -325,60 +419,299 @@ def test_training_mode_enables_exploration():
     scheduler.agent.epsilon = 1.0
 
     state = np.zeros(
-        scheduler.model_definition["input_dim"],
+        scheduler.model_definition[
+            "input_dim"
+        ],
         dtype=np.float32,
     )
 
     actions = {
-        scheduler.select_policy_action(state)
+        scheduler.select_policy_action(
+            state
+        )
         for _ in range(20)
     }
 
     assert len(actions) > 1
 
 
-def test_evaluation_mode_is_greedy():
-    config = ExperimentConfig(
-        training_mode=False,
+def test_evaluation_mode_is_greedy(
+    tmp_path,
+):
+    train_config = ExperimentConfig(
+        model_variant="M1",
+        training_mode=True,
         seed=7,
     )
 
-    scheduler = AssuredScheduler(
+    train_scheduler = AssuredScheduler(
         [10],
         "FR1",
         False,
         False,
         1.0,
-        config=config,
+        config=train_config,
     )
 
-    scheduler.agent.epsilon = 1.0
+    checkpoint_dir = (
+        tmp_path
+        / "m1_checkpoint"
+    )
+
+    train_scheduler.agent.save_checkpoint(
+        checkpoint_dir,
+        metadata={
+            "model_variant": "M1",
+            "seed": 7,
+        },
+    )
+
+    eval_config = ExperimentConfig(
+        model_variant="M1",
+        training_mode=False,
+        seed=7,
+        checkpoint_path=str(
+            checkpoint_dir
+        ),
+    )
+
+    eval_scheduler = AssuredScheduler(
+        [10],
+        "FR1",
+        False,
+        False,
+        1.0,
+        config=eval_config,
+    )
+
+    assert (
+        eval_scheduler.agent.evaluation_mode
+        is True
+    )
+
+    assert (
+        eval_scheduler.agent.epsilon
+        == 0.0
+    )
+
+    assert (
+        eval_scheduler.loaded_checkpoint_metadata[
+            "model_variant"
+        ]
+        == "M1"
+    )
 
     state = np.zeros(
-        scheduler.model_definition["input_dim"],
+        eval_scheduler.model_definition[
+            "input_dim"
+        ],
         dtype=np.float32,
     )
 
     actions = [
-        scheduler.select_policy_action(state)
+        eval_scheduler.select_policy_action(
+            state
+        )
         for _ in range(10)
     ]
 
-    assert len(set(actions)) == 1
-
-
-def test_evaluation_mode_does_not_require_exploration():
-    config = ExperimentConfig(
-        training_mode=False,
+    assert (
+        len(
+            set(actions)
+        )
+        == 1
     )
 
-    scheduler = AssuredScheduler(
+
+def test_evaluation_mode_does_not_require_exploration(
+    tmp_path,
+):
+    train_config = ExperimentConfig(
+        model_variant="M1",
+        training_mode=True,
+        seed=7,
+    )
+
+    train_scheduler = AssuredScheduler(
         [10],
         "FR1",
         False,
         False,
         1.0,
-        config=config,
+        config=train_config,
     )
 
-    assert scheduler.config.training_mode is False  
+    checkpoint_dir = (
+        tmp_path
+        / "m1_checkpoint"
+    )
+
+    train_scheduler.agent.save_checkpoint(
+        checkpoint_dir
+    )
+
+    eval_config = ExperimentConfig(
+        model_variant="M1",
+        training_mode=False,
+        seed=7,
+        checkpoint_path=str(
+            checkpoint_dir
+        ),
+    )
+
+    eval_scheduler = AssuredScheduler(
+        [10],
+        "FR1",
+        False,
+        False,
+        1.0,
+        config=eval_config,
+    )
+
+    state = np.zeros(
+        eval_scheduler.model_definition[
+            "input_dim"
+        ],
+        dtype=np.float32,
+    )
+
+    action_with_explore_true = (
+        eval_scheduler.agent.select_action(
+            state,
+            explore=True,
+        )
+    )
+
+    action_with_explore_false = (
+        eval_scheduler.agent.select_action(
+            state,
+            explore=False,
+        )
+    )
+
+    assert (
+        action_with_explore_true
+        == action_with_explore_false
+    )
+
+    assert (
+        eval_scheduler.agent.evaluation_mode
+        is True
+    )
+
+    assert (
+        eval_scheduler.agent.epsilon
+        == 0.0
+    )
+
+
+def test_evaluation_mode_blocks_replay_and_training(
+    tmp_path,
+):
+    train_config = ExperimentConfig(
+        model_variant="M1",
+        training_mode=True,
+        seed=7,
+    )
+
+    train_scheduler = AssuredScheduler(
+        [10],
+        "FR1",
+        False,
+        False,
+        1.0,
+        config=train_config,
+    )
+
+    checkpoint_dir = (
+        tmp_path
+        / "m1_checkpoint"
+    )
+
+    train_scheduler.agent.save_checkpoint(
+        checkpoint_dir
+    )
+
+    eval_config = ExperimentConfig(
+        model_variant="M1",
+        training_mode=False,
+        seed=7,
+        checkpoint_path=str(
+            checkpoint_dir
+        ),
+    )
+
+    eval_scheduler = AssuredScheduler(
+        [10],
+        "FR1",
+        False,
+        False,
+        1.0,
+        config=eval_config,
+    )
+
+    state = np.zeros(
+        eval_scheduler.model_definition[
+            "input_dim"
+        ],
+        dtype=np.float32,
+    )
+
+    replay_size_before = len(
+        eval_scheduler.agent.replay_buffer
+    )
+
+    training_steps_before = (
+        eval_scheduler.agent.training_steps
+    )
+
+    weights_before = [
+        weight.copy()
+        for weight
+        in eval_scheduler.agent.online_model.get_weights()
+    ]
+
+    eval_scheduler.agent.remember(
+        state,
+        0,
+        1.0,
+        state,
+        False,
+    )
+
+    result = (
+        eval_scheduler.agent.train_step()
+    )
+
+    replay_size_after = len(
+        eval_scheduler.agent.replay_buffer
+    )
+
+    training_steps_after = (
+        eval_scheduler.agent.training_steps
+    )
+
+    weights_after = (
+        eval_scheduler.agent.online_model.get_weights()
+    )
+
+    assert result is None
+
+    assert (
+        replay_size_after
+        == replay_size_before
+    )
+
+    assert (
+        training_steps_after
+        == training_steps_before
+    )
+
+    for before, after in zip(
+        weights_before,
+        weights_after,
+    ):
+        assert np.array_equal(
+            before,
+            after,
+        )

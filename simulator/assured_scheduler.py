@@ -7,20 +7,7 @@ from assured_interval import (
     snapshot_slice_counters,
     snapshot_urllc_deadline,
 )
-from assured_metrics import (
-    build_m1_state,
-    build_m2_state,
-)
 
-from agent.model_definitions import get_model_definition
-from common.action_space import (
-    ACTION_SPACE_SIZE,
-    get_action_weights,
-)
-from metrics.service_metrics import starvation_penalty
-from metrics.transition_metrics import derive_transition_metrics
-from reward.assured_reward import compute_assured_reward
-from agent.dqn_agent import DQNAgent
 from assured_metrics import (
     build_m1_state,
     build_m2_state,
@@ -28,6 +15,10 @@ from assured_metrics import (
     slice_mean_sinr,
     slice_max_hol_delay,
 )
+
+from agent.dqn_agent import DQNAgent
+from agent.model_definitions import get_model_definition
+
 from common.action_space import (
     ACTION_SPACE_SIZE,
     SLICE_ORDER,
@@ -38,10 +29,29 @@ from common.prb_allocation import (
     percentage_action_to_numerology_prbs,
     reference_prbs_used,
 )
-from config.experiment_config import ExperimentConfig
-from common.reproducibility import set_global_seed
+
+from common.reproducibility import (
+    set_global_seed,
+)
+
+from config.experiment_config import (
+    ExperimentConfig,
+)
+
 from metrics.normalization_diagnostics import (
     NormalizationDiagnostics,
+)
+
+from metrics.service_metrics import (
+    starvation_penalty,
+)
+
+from metrics.transition_metrics import (
+    derive_transition_metrics,
+)
+
+from reward.assured_reward import (
+    compute_assured_reward,
 )
 
 
@@ -81,7 +91,7 @@ class AssuredScheduler(InterSliceScheduler):
 
         if config is None:
             config = ExperimentConfig(
-                control_interval_ms=gr
+                control_interval_ms=gr,
             )
 
         if not isinstance(
@@ -102,6 +112,15 @@ class AssuredScheduler(InterSliceScheduler):
             self.config.model_variant
         )
 
+        if (
+            self.model_variant
+            not in self.VALID_VARIANTS
+        ):
+            raise ValueError(
+                "unsupported AssuredQoS model "
+                f"variant: {self.model_variant}"
+            )
+
         self.model_definition = (
             get_model_definition(
                 self.model_variant
@@ -120,20 +139,74 @@ class AssuredScheduler(InterSliceScheduler):
             self.config.starvation_threshold_ms
         )
 
-        self.action_space_size = ACTION_SPACE_SIZE
+        self.action_space_size = (
+            ACTION_SPACE_SIZE
+        )
+
+        model_action_dim = int(
+            self.model_definition[
+                "output_dim"
+            ]
+        )
+
+        if (
+            model_action_dim
+            != self.action_space_size
+        ):
+            raise ValueError(
+                "model output dimension does not "
+                "match centralized action space: "
+                f"{model_action_dim} != "
+                f"{self.action_space_size}"
+            )
 
         self.agent = DQNAgent(
             input_dim=self.model_definition[
                 "input_dim"
             ],
-            action_dim=self.model_definition[
-                "output_dim"
-            ],
+            action_dim=self.action_space_size,
             seed=self.config.seed,
         )
+
+        if self.config.training_mode:
+            self.agent.set_evaluation_mode(
+                False
+            )
+
+        else:
+            checkpoint_path = getattr(
+                self.config,
+                "checkpoint_path",
+                None,
+            )
+
+            if not checkpoint_path:
+                raise ValueError(
+                    "evaluation mode requires "
+                    "checkpoint_path"
+                )
+
+            self.loaded_checkpoint_metadata = (
+                self.agent.load_checkpoint(
+                    checkpoint_path
+                )
+            )
+
+            # Must happen AFTER checkpoint loading because
+            # checkpoint metadata may restore training epsilon.
+            self.agent.set_evaluation_mode(
+                True
+            )
+
+        if self.config.training_mode:
+            self.loaded_checkpoint_metadata = (
+                None
+            )
+
         self.normalization_diagnostics = (
             NormalizationDiagnostics()
         )
+
         self.embb_starvation_ms = 0.0
         self.mmtc_starvation_ms = 0.0
 
@@ -308,13 +381,46 @@ class AssuredScheduler(InterSliceScheduler):
         outcomes,
         starvation_value,
     ):
+        weights = {
+            "urllc":
+                self.config.reward_urllc_service,
+
+            "embb":
+                self.config.reward_embb_service,
+
+            "mmtc":
+                self.config.reward_mmtc_service,
+
+            "utilization":
+                self.config.reward_utilization,
+
+            "deadline":
+                self.config.reward_deadline,
+
+            "starvation":
+                self.config.reward_starvation,
+        }
+
         return compute_assured_reward(
-            urllc_service=outcomes.urllc_service,
-            embb_service=outcomes.embb_service,
-            mmtc_service=outcomes.mmtc_service,
-            utilization=outcomes.utilization,
-            deadline_miss_ratio=outcomes.deadline_miss_ratio,
-            starvation_penalty=starvation_value,
+            urllc_service=(
+                outcomes.urllc_service
+            ),
+            embb_service=(
+                outcomes.embb_service
+            ),
+            mmtc_service=(
+                outcomes.mmtc_service
+            ),
+            utilization=(
+                outcomes.utilization
+            ),
+            deadline_miss_ratio=(
+                outcomes.deadline_miss_ratio
+            ),
+            starvation_penalty=(
+                starvation_value
+            ),
+            weights=weights,
         )
 
     def _find_slice_key(self, service):

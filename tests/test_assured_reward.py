@@ -57,3 +57,47 @@ def test_starvation_penalty_reduces_reward():
     )
 
     assert bad.total < good.total
+
+def test_custom_weights_change_reward():
+    result = compute_assured_reward(
+        urllc_service=1.0,
+        embb_service=0.0,
+        mmtc_service=0.0,
+        utilization=0.0,
+        deadline_miss_ratio=0.0,
+        starvation_penalty=0.0,
+        weights={
+            "urllc": 1.0,
+            "embb": 0.0,
+            "mmtc": 0.0,
+            "utilization": 0.0,
+            "deadline": 0.0,
+            "starvation": 0.0,
+        },
+    )
+
+    assert result.total == 1.0
+import pytest
+
+
+def test_invalid_reward_weights_rejected():
+    with pytest.raises(
+        ValueError,
+        match="sum",
+    ):
+        compute_assured_reward(
+            urllc_service=1.0,
+            embb_service=1.0,
+            mmtc_service=1.0,
+            utilization=1.0,
+            deadline_miss_ratio=0.0,
+            starvation_penalty=0.0,
+            weights={
+                "urllc": 0.5,
+                "embb": 0.5,
+                "mmtc": 0.5,
+                "utilization": 0.0,
+                "deadline": 0.0,
+                "starvation": 0.0,
+            },
+        )

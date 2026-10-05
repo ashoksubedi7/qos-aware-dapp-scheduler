@@ -1,5 +1,7 @@
+import json
 import random
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 from tensorflow.keras.optimizers import Adam
@@ -22,21 +24,32 @@ class DQNAgent:
         epsilon_min=0.05,
         epsilon_decay=0.9995,
         seed=None,
+        self_evaluation_mode=False,
     ):
         if input_dim <= 0:
-            raise ValueError("input_dim must be greater than zero")
+            raise ValueError(
+                "input_dim must be greater than zero"
+            )
 
         if action_dim <= 0:
-            raise ValueError("action_dim must be greater than zero")
+            raise ValueError(
+                "action_dim must be greater than zero"
+            )
 
         if not 0.0 <= gamma <= 1.0:
-            raise ValueError("gamma must be in [0, 1]")
+            raise ValueError(
+                "gamma must be in [0, 1]"
+            )
 
         if replay_capacity <= 0:
-            raise ValueError("replay_capacity must be greater than zero")
+            raise ValueError(
+                "replay_capacity must be greater than zero"
+            )
 
         if batch_size <= 0:
-            raise ValueError("batch_size must be greater than zero")
+            raise ValueError(
+                "batch_size must be greater than zero"
+            )
 
         if min_replay_size < batch_size:
             raise ValueError(
@@ -53,17 +66,27 @@ class DQNAgent:
 
         self.gamma = float(gamma)
         self.batch_size = int(batch_size)
-        self.min_replay_size = int(min_replay_size)
+        self.min_replay_size = int(
+            min_replay_size
+        )
         self.target_update_interval = int(
             target_update_interval
         )
 
-        self.epsilon = float(epsilon_start)
-        self.epsilon_min = float(epsilon_min)
-        self.epsilon_decay = float(epsilon_decay)
+        self.epsilon = float(
+            epsilon_start
+        )
+        self.epsilon_min = float(
+            epsilon_min
+        )
+        self.epsilon_decay = float(
+            epsilon_decay
+        )
 
         self.rng = random.Random(seed)
-        self.np_rng = np.random.default_rng(seed)
+        self.np_rng = np.random.default_rng(
+            seed
+        )
 
         self.replay_buffer = deque(
             maxlen=int(replay_capacity)
@@ -77,12 +100,10 @@ class DQNAgent:
             input_dim=self.input_dim,
         )
 
-        optimizer = Adam(
-            learning_rate=learning_rate
-        )
-
         self.online_model.compile(
-            optimizer=optimizer,
+            optimizer=Adam(
+                learning_rate=learning_rate
+            ),
             loss="mse",
         )
 
@@ -93,19 +114,39 @@ class DQNAgent:
             loss="mse",
         )
 
-        self.update_target_network()
-
         self.training_steps = 0
 
-    def _prepare_state(self, state):
+        self.evaluation_mode = bool(
+            self_evaluation_mode
+        )
+
+        self.update_target_network()
+
+        if self.evaluation_mode:
+            self.epsilon = 0.0
+
+    @property
+    def model(self):
+        """
+        Alias for compatibility with
+        external callers and tests.
+        """
+        return self.online_model
+
+    def _prepare_state(
+        self,
+        state,
+    ):
         state = np.asarray(
             state,
             dtype=np.float32,
         )
 
-        if state.shape != (self.input_dim,):
+        if state.shape != (
+            self.input_dim,
+        ):
             raise ValueError(
-                f"expected state shape "
+                "expected state shape "
                 f"({self.input_dim},), "
                 f"got {state.shape}"
             )
@@ -121,6 +162,9 @@ class DQNAgent:
             state
         )
 
+        if self.evaluation_mode:
+            explore = False
+
         if (
             explore
             and self.rng.random()
@@ -130,10 +174,15 @@ class DQNAgent:
                 self.action_dim
             )
 
-        q_values = self.online_model.predict(
-            state.reshape(1, -1),
-            verbose=0,
-        )[0]
+        q_values = (
+            self.online_model.predict(
+                state.reshape(
+                    1,
+                    -1,
+                ),
+                verbose=0,
+            )[0]
+        )
 
         return int(
             np.argmax(q_values)
@@ -147,6 +196,9 @@ class DQNAgent:
         next_state,
         done,
     ):
+        if self.evaluation_mode:
+            return
+
         state = self._prepare_state(
             state
         )
@@ -155,7 +207,13 @@ class DQNAgent:
             next_state
         )
 
-        if not 0 <= int(action) < self.action_dim:
+        action = int(action)
+
+        if not (
+            0
+            <= action
+            < self.action_dim
+        ):
             raise ValueError(
                 "action outside action space"
             )
@@ -163,7 +221,7 @@ class DQNAgent:
         self.replay_buffer.append(
             (
                 state.copy(),
-                int(action),
+                action,
                 float(reward),
                 next_state.copy(),
                 bool(done),
@@ -177,6 +235,9 @@ class DQNAgent:
         )
 
     def train_step(self):
+        if self.evaluation_mode:
+            return None
+
         if not self.can_train():
             return None
 
@@ -186,38 +247,57 @@ class DQNAgent:
         )
 
         states = np.asarray(
-            [item[0] for item in batch],
+            [
+                item[0]
+                for item in batch
+            ],
             dtype=np.float32,
         )
 
         actions = np.asarray(
-            [item[1] for item in batch],
+            [
+                item[1]
+                for item in batch
+            ],
             dtype=np.int64,
         )
 
         rewards = np.asarray(
-            [item[2] for item in batch],
+            [
+                item[2]
+                for item in batch
+            ],
             dtype=np.float32,
         )
 
         next_states = np.asarray(
-            [item[3] for item in batch],
+            [
+                item[3]
+                for item in batch
+            ],
             dtype=np.float32,
         )
 
         dones = np.asarray(
-            [item[4] for item in batch],
+            [
+                item[4]
+                for item in batch
+            ],
             dtype=np.float32,
         )
 
-        current_q = self.online_model.predict(
-            states,
-            verbose=0,
+        current_q = (
+            self.online_model.predict(
+                states,
+                verbose=0,
+            )
         )
 
-        next_q = self.target_model.predict(
-            next_states,
-            verbose=0,
+        next_q = (
+            self.target_model.predict(
+                next_states,
+                verbose=0,
+            )
         )
 
         targets = current_q.copy()
@@ -229,22 +309,31 @@ class DQNAgent:
 
         target_values = (
             rewards
-            + (1.0 - dones)
+            + (
+                1.0
+                - dones
+            )
             * self.gamma
             * max_next_q
         )
 
         targets[
-            np.arange(self.batch_size),
+            np.arange(
+                self.batch_size
+            ),
             actions,
         ] = target_values
 
-        history = self.online_model.fit(
-            states,
-            targets,
-            batch_size=self.batch_size,
-            epochs=1,
-            verbose=0,
+        history = (
+            self.online_model.fit(
+                states,
+                targets,
+                batch_size=(
+                    self.batch_size
+                ),
+                epochs=1,
+                verbose=0,
+            )
         )
 
         self.training_steps += 1
@@ -257,15 +346,218 @@ class DQNAgent:
             self.update_target_network()
 
         return float(
-            history.history["loss"][0]
+            history.history[
+                "loss"
+            ][0]
         )
 
-    def update_target_network(self):
+    def update_target_network(
+        self,
+    ):
+        if self.evaluation_mode:
+            return
+
         self.target_model.set_weights(
             self.online_model.get_weights()
         )
 
-    def decay_epsilon(self):
+    def save_checkpoint(
+        self,
+        directory,
+        metadata=None,
+    ):
+        directory = Path(
+            directory
+        )
+
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        online_path = (
+            directory
+            / "online.weights.h5"
+        )
+
+        target_path = (
+            directory
+            / "target.weights.h5"
+        )
+
+        metadata_path = (
+            directory
+            / "metadata.json"
+        )
+
+        self.online_model.save_weights(
+            online_path
+        )
+
+        self.target_model.save_weights(
+            target_path
+        )
+
+        checkpoint_metadata = {
+            "input_dim": int(
+                self.input_dim
+            ),
+            "action_dim": int(
+                self.action_dim
+            ),
+            "epsilon": float(
+                self.epsilon
+            ),
+            "training_steps": int(
+                self.training_steps
+            ),
+        }
+
+        if metadata is not None:
+            checkpoint_metadata.update(
+                metadata
+            )
+
+        with metadata_path.open(
+            "w",
+            encoding="utf-8",
+        ) as handle:
+            json.dump(
+                checkpoint_metadata,
+                handle,
+                indent=2,
+                sort_keys=True,
+            )
+
+        return {
+            "online_weights": str(
+                online_path
+            ),
+            "target_weights": str(
+                target_path
+            ),
+            "metadata": str(
+                metadata_path
+            ),
+        }
+
+    def load_checkpoint(
+        self,
+        directory,
+    ):
+        directory = Path(
+            directory
+        )
+
+        online_path = (
+            directory
+            / "online.weights.h5"
+        )
+
+        target_path = (
+            directory
+            / "target.weights.h5"
+        )
+
+        metadata_path = (
+            directory
+            / "metadata.json"
+        )
+
+        if not online_path.exists():
+            raise FileNotFoundError(
+                "Checkpoint not found at "
+                f"{online_path}"
+            )
+
+        metadata = {}
+
+        if metadata_path.exists():
+            with metadata_path.open(
+                "r",
+                encoding="utf-8",
+            ) as handle:
+                metadata = json.load(
+                    handle
+                )
+
+            if (
+                "input_dim"
+                in metadata
+                and int(
+                    metadata[
+                        "input_dim"
+                    ]
+                )
+                != self.input_dim
+            ):
+                raise ValueError(
+                    "checkpoint input dimension "
+                    "does not match agent"
+                )
+
+            if (
+                "action_dim"
+                in metadata
+                and int(
+                    metadata[
+                        "action_dim"
+                    ]
+                )
+                != self.action_dim
+            ):
+                raise ValueError(
+                    "checkpoint action dimension "
+                    "does not match agent"
+                )
+
+        self.online_model.load_weights(
+            online_path
+        )
+
+        if target_path.exists():
+            self.target_model.load_weights(
+                target_path
+            )
+        else:
+            self.target_model.set_weights(
+                self.online_model.get_weights()
+            )
+
+        if "epsilon" in metadata:
+            self.epsilon = float(
+                metadata["epsilon"]
+            )
+
+        if (
+            "training_steps"
+            in metadata
+        ):
+            self.training_steps = int(
+                metadata[
+                    "training_steps"
+                ]
+            )
+
+        return metadata
+
+    def set_evaluation_mode(
+        self,
+        enabled=True,
+    ):
+        self.evaluation_mode = bool(
+            enabled
+        )
+
+        if self.evaluation_mode:
+            self.epsilon = 0.0
+
+    def decay_epsilon(
+        self,
+    ):
+        if self.evaluation_mode:
+            return 0.0
+
         self.epsilon = max(
             self.epsilon_min,
             self.epsilon

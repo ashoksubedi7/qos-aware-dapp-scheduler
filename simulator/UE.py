@@ -1,6 +1,7 @@
 """This module contains the UE, Packet Flow, Packet, PcktQueue, Bearer and RadioLink classes.
 These classes are oriented to describe UE traffic profile, and UE relative concepts.
 """
+import hashlib
 import os
 import random
 import sys
@@ -11,6 +12,39 @@ from scipy.stats import uniform
 import numpy as np
 import simpy
 from environment.radio_scenarios import RadioScenario
+
+def stable_traffic_seed(
+    experiment_seed,
+    slice_name,
+    ue_id,
+    direction,
+    flow_id,
+):
+    """
+    Create a deterministic per-flow traffic seed.
+
+    Python's built-in hash() is intentionally not used
+    because its value can vary between interpreter runs.
+    """
+
+    payload = (
+        "traffic"
+        f"|{int(experiment_seed)}"
+        f"|{slice_name}"
+        f"|{ue_id}"
+        f"|{direction}"
+        f"|{int(flow_id)}"
+    ).encode("utf-8")
+
+    digest = hashlib.sha256(
+        payload
+    ).digest()
+
+    return int.from_bytes(
+        digest[:8],
+        byteorder="big",
+        signed=False,
+    )
 
 # UE class: terminal description
 class UE:
@@ -181,7 +215,11 @@ class UE:
                     + str(pD.tIn)
                     + "</b></p>"
                 )
-            self.packetFlows[0].lostPackets = self.packetFlows[0].lostPackets + 1
+            self.packetFlows[0].lostPackets = (
+                self.packetFlows[0].recordPacketDrop(
+                    pD.secNum
+                )
+            )
 
     def releaseConnection(self, cl):
         self.state = "RRC-IDLE"
@@ -206,6 +244,7 @@ class PacketFlow:
         distributionSize,
         distributionArrival,
         scheduling_deadline=None,
+        experiment_config=None,
     ):
         self.id = i
         self.tMed = 0
@@ -237,10 +276,45 @@ class PacketFlow:
         self.schedulingDelays = []
         self.deliveredPackets = 0
         self.deliveredBytes = 0
-        self.packetGenerationTimes = {}
-        self.completedPacketIds = set()
-        self.completionDelays = []
 
+        # Packet lifecycle accounting.
+        self.generatedPacketIds = set()
+        self.droppedPacketIds = set()
+        self.completedPacketIds = set()
+
+        self.packetGenerationTimes = {}
+        self.completionDelays = []
+        self.experiment_config = (
+            experiment_config
+        )
+        if self.experiment_config is None:
+            # Preserve historical simulator behavior.
+            self.py_rng = random
+            self.np_rng = np.random
+            self.traffic_seed = None
+
+        else:
+            self.traffic_seed = (
+                stable_traffic_seed(
+                    experiment_seed=(
+                        self.experiment_config.seed
+                    ),
+                    slice_name=self.sliceName,
+                    ue_id=self.ue,
+                    direction=self.type,
+                    flow_id=self.id,
+                )
+            )
+
+            self.py_rng = random.Random(
+                self.traffic_seed
+            )
+
+            self.np_rng = (
+                np.random.default_rng(
+                    self.traffic_seed
+                )
+            )
     def recordSchedulingOutcome(self, packet, now):
         """Record first-scheduling delay exactly once per packet."""
         if packet.scheduled_at is not None:
@@ -262,46 +336,104 @@ class PacketFlow:
     def recordDeliveryCompletion(
         self,
         packet_id,
-        now,
+        completion_time,
     ):
         """
-        Record successful full-packet delivery exactly once.
+        Record final successful packet delivery.
 
-        Completion delay is measured from packet generation until the
-        final successful TB needed for that packet has been received.
+        Returns the generation-to-completion delay for
+        the first valid completion. Duplicate or unknown
+        completions return None.
         """
         packet_id = int(packet_id)
 
-        if packet_id in self.completedPacketIds:
+        if (
+            packet_id
+            in self.completedPacketIds
+        ):
             return None
+        if (
+            packet_id
+            in self.droppedPacketIds
+        ):
+            raise ValueError(
+                "dropped packet cannot later "
+                "be completed"
+            )
 
-        if packet_id not in self.packetGenerationTimes:
+        generation_time = (
+            self.packetGenerationTimes.get(
+                packet_id
+            )
+        )
+
+        if generation_time is None:
             return None
 
         completion_delay = (
-            float(now)
-            - float(
-                self.packetGenerationTimes[
-                    packet_id
-                ]
-            )
+            float(completion_time)
+            - float(generation_time)
         )
 
         self.completedPacketIds.add(
             packet_id
         )
 
+        self.deliveredPackets += 1
+
         self.completionDelays.append(
             completion_delay
         )
-
-        self.deliveredPackets += 1
 
         del self.packetGenerationTimes[
             packet_id
         ]
 
         return completion_delay
+
+
+    def recordPacketDrop(
+        self,
+        packet_id,
+    ):
+        """
+        Record a true packet drop exactly once.
+
+        End-of-simulation residual packets are not
+        considered drops.
+        """
+
+        packet_id = int(
+            packet_id
+        )
+
+        if (
+            packet_id
+            in self.completedPacketIds
+        ):
+            raise ValueError(
+                "cannot drop an already "
+                "completed packet"
+            )
+
+        if (
+            packet_id
+            in self.droppedPacketIds
+        ):
+            return False
+
+        self.droppedPacketIds.add(
+            packet_id
+        )
+
+        self.lostPackets += 1
+
+        self.packetGenerationTimes.pop(
+            packet_id,
+            None,
+        )
+
+        return True
 
     def setQosFId(self, q):
         self.qosFlowId = q
@@ -334,15 +466,91 @@ class PacketFlow:
     def multiply(self, seq, factor):
         return [x * factor for x in seq]
 
+    def getTrafficEndTime(
+        self,
+        tSim,
+    ):
+        """
+        Return the time at which this flow stops
+        generating new application packets.
+
+        Legacy simulations preserve the historical
+        0.83 multiplier.
+
+        AssuredQoS simulations use an explicit drain
+        interval at the end of the simulation.
+        """
+
+        tSim = float(
+            tSim
+        )
+
+        if tSim <= 0:
+            raise ValueError(
+                "tSim must be greater "
+                "than zero"
+            )
+
+        if self.experiment_config is None:
+            return (
+                tSim
+                * self.deactivationTime
+                * 0.83
+            )
+
+        drain_duration = float(
+            self.experiment_config
+            .drain_duration_ms
+        )
+
+        if (
+            drain_duration
+            >= tSim
+        ):
+            raise ValueError(
+                "drain_duration_ms must be "
+                "smaller than tSim"
+        )
+
+        experiment_traffic_end = (
+            tSim
+            - drain_duration
+        )
+
+        flow_end = (
+            tSim
+            * self.deactivationTime
+        )
+
+        return min(
+            flow_end,
+            experiment_traffic_end,
+        )
+
     def queueAppPckt(self, env, tSim):  # --- PEM -----
         """This method creates packets according to the packet flow traffic profile and stores them in the application buffer."""
         ueN = int(self.ue[2:])  # number of UEs in simulation
-        self.tStart = random.expovariate(1.0) + tSim * self.activationTime
+        self.tStart = (
+            self.py_rng.expovariate(
+                1.0
+            )
+            + tSim
+            * self.activationTime
+        )
         yield env.timeout(self.tStart)  # each UE start transmission after tStart
-        while env.now < (tSim * self.deactivationTime * 0.83):
+        end_time = (
+            self.getTrafficEndTime(
+                tSim
+            )
+        )
+
+        while env.now < end_time:
             self.sentPackets = self.sentPackets + 1
             size = self.getPsize()
             pD = Packet(self.pId, size + self.header, self.qosFlowId, self.ue)
+            self.generatedPacketIds.add(
+                int(pD.secNum)
+            )
             self.pId = self.pId + 1
             pD.tIn = env.now
             pD.timestamp = env.now
@@ -360,7 +568,7 @@ class PacketFlow:
         # Generate truncated normal samples
         a = (0 - mean) / sigma
         b = (maximum - mean) / sigma
-        normal_samples = np.random.normal(size=size)
+        normal_samples = self.np_rng.normal(size=size)
         truncated_samples = np.clip(normal_samples, a, b)
 
         # Transform truncated normal samples to lognormal distribution
@@ -374,7 +582,7 @@ class PacketFlow:
         The size is determined by the distribution specified in self.distributionSize.
         """
         if self.distributionSize == "Pareto":
-            pSize = random.paretovariate(1.2) * (0.2 / 1.2) * 2 + self.packetSize
+            pSize = self.py_rng.paretovariate(1.2) * (0.2 / 1.2) * 2 + self.packetSize
             return int(pSize)
         elif self.distributionSize == "Pareto2":
             maximum = 700
@@ -383,7 +591,7 @@ class PacketFlow:
             size = 1
             k = (alpha - 1) * mean / maximum
 
-            pareto_samples = maximum * (np.random.pareto(alpha, size=size) + k)
+            pareto_samples = maximum * (self.np_rng.pareto(alpha, size=size) + k)
             truncated_samples = np.clip(pareto_samples, None, maximum)
 
             pSize = truncated_samples
@@ -393,7 +601,7 @@ class PacketFlow:
             X = self.packetSize
             mu = np.log(X**2 / np.sqrt(X**2 + std**2))
             sigma = np.sqrt(np.log(1 + (std**2 / X**2)))
-            pSize = np.random.lognormal(mu, sigma)
+            pSize = self.np_rng.lognormal(mu, sigma)
 
             if pSize > self.sMax:
                 pSize = self.sMax
@@ -402,22 +610,38 @@ class PacketFlow:
         elif self.distributionSize == "Constant":
             return self.packetSize
         elif self.distributionSize == "Uniform":
-            pSize = random.uniform(self.packetSize, self.sMax)
+            pSize = self.py_rng.uniform(self.packetSize, self.sMax)
             return int(pSize)
         elif self.distributionSize == "TruncatedNormal":
             pSize = int(self.truncated_lognormal(self.packetSize, 3, 900))
             return pSize
         elif self.distributionSize == "Normal":
-            pSize = np.random.normal(self.packetSize, 40)
+            pSize = self.np_rng.normal(self.packetSize, 40)
             if pSize > self.sMax:
                 pSize = self.sMax
             return pSize
         elif self.distributionSize == "Uniform2":
             a = 500 - 2
             b = 500 + 2
+            if self.experiment_config is None:
+                return int(
+                    uniform.rvs(
+                        loc=a,
+                        scale=10,
+                        size=1,
+                    )[0]
+                )
+            return int(
+                uniform.rvs(
+                    loc=a,
+                    scale=10,
+                    size=1,
+                    random_state=self.np_rng,
+                )[0]
+            )
             return int(uniform.rvs(loc=a, scale=10, size=1)[0])
         elif self.distributionSize == "Normal2":
-            pSize = np.random.normal(self.packetSize, self.packetSize / 15)
+            pSize = self.np_rng.normal(self.packetSize, self.packetSize / 15)
             if pSize > self.sMax:
                 pSize = self.sMax
             return pSize
@@ -429,26 +653,44 @@ class PacketFlow:
             a = smin
 
             scale = X / (1 - truncexpon.cdf(smax, b=b, loc=0, scale=X))
+            if self.experiment_config is None:
+                return int(
+                    truncexpon.rvs(
+                        b=b,
+                        loc=0,
+                        scale=scale,
+                        size=1,
+                    )[0]
+                )
+            return int(
+                truncexpon.rvs(
+                    b=b,
+                    loc=0,
+                    scale=scale,
+                    size=1,
+                    random_state=self.np_rng,
+                )[0]
+            )
             return int(truncexpon.rvs(b=b, loc=0, scale=scale, size=1)[0])
         elif self.distributionSize == "Exponential":
-            pSize = np.random.exponential(self.packetSize)
+            pSize = self.np_rng.exponential(self.packetSize)
             if pSize > self.sMax:
                 pSize = self.sMax
             return pSize
         elif self.distributionSize == "Gamma":
-            pSize = np.random.gamma(self.packetSize, 0.722)
+            pSize = self.np_rng.gamma(self.packetSize, 0.722)
             if pSize > self.sMax:
                 pSize = self.sMax
             return pSize
         elif self.distributionSize == "Weibull":
-            pSize = np.random.weibull(self.packetSize)
+            pSize = self.np_rng.weibull(self.packetSize)
             while pSize > self.sMax:
-                pSize = np.random.weibull(self.packetSize)
+                pSize = self.np_rng.weibull(self.packetSize)
             return pSize
         elif self.distributionSize == "Beta":
-            pSize = np.random.beta(self.packetSize, 0.722)
+            pSize = self.np_rng.beta(self.packetSize, 0.722)
             while pSize > self.sMax:
-                pSize = np.random.beta(self.packetSize, 0.722)
+                pSize = self.np_rng.beta(self.packetSize, 0.722)
             return pSize
         else:
             print("Error: Distribution size not defined.")
@@ -457,7 +699,7 @@ class PacketFlow:
         if self.distributionArrival == "Constant":
             pArrRate = self.pckArrivalRate
         elif self.distributionArrival == "Pareto":
-            pArrRate = random.paretovariate(1.2) * (
+            pArrRate = self.py_rng.paretovariate(1.2) * (
                 self.pckArrivalRate * (0.2 / 1.2)
             )
         elif self.distributionArrival == "Pareto2":
@@ -467,85 +709,118 @@ class PacketFlow:
             size = 1
             k = (alpha - 1) * mean / maximum
 
-            pareto_samples = maximum * (np.random.pareto(alpha, size=size) + k)
+            pareto_samples = maximum * (self.np_rng.pareto(alpha, size=size) + k)
             truncated_samples = np.clip(pareto_samples, None, maximum)
             pArrRate = truncated_samples
             return int(pArrRate)
         elif self.distributionArrival == "Exponential":
-            pArrRate = np.random.exponential(self.pckArrivalRate)
+            pArrRate = self.np_rng.exponential(self.pckArrivalRate)
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Uniform":
-            pArrRate = random.uniform(0, self.pckArrivalRate)
+            pArrRate = self.py_rng.uniform(0, self.pckArrivalRate)
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Uniform2":
-            pArrRate = random.uniform(0, self.pckArrivalRate) + 0.5
+            pArrRate = self.py_rng.uniform(0, self.pckArrivalRate) + 0.5
         elif self.distributionArrival == "Normal":
-            pArrRate = abs(np.random.normal(self.pckArrivalRate, 0.6))
+            pArrRate = abs(self.np_rng.normal(self.pckArrivalRate, 0.6))
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
             return pArrRate
         elif self.distributionArrival == "Normal2":
-            pArrRate = abs(np.random.normal(self.pckArrivalRate, 0.05))
+            pArrRate = abs(self.np_rng.normal(self.pckArrivalRate, 0.05))
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
             return pArrRate
         elif self.distributionArrival == "Normal3":
-            pArrRate = abs(np.random.normal(self.pckArrivalRate, 1))
+            pArrRate = abs(self.np_rng.normal(self.pckArrivalRate, 1))
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
             return pArrRate
         elif self.distributionArrival == "Lognormal":
-            pArrRate = np.random.lognormal(self.pckArrivalRate, 0.722)
+            pArrRate = self.np_rng.lognormal(self.pckArrivalRate, 0.722)
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Weibull":
-            pArrRate = np.random.weibull(self.pckArrivalRate)
+            pArrRate = self.np_rng.weibull(self.pckArrivalRate)
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Beta":
-            pArrRate = np.random.beta(self.pckArrivalRate, 1)
+            pArrRate = self.np_rng.beta(self.pckArrivalRate, 1)
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Gamma":
-            pArrRate = np.random.gamma(self.pckArrivalRate, 1)
+            pArrRate = self.np_rng.gamma(self.pckArrivalRate, 1)
             if pArrRate > self.tMax:
                 pArrRate = self.tMax
         elif self.distributionArrival == "Triangular":
-            pArrRate = np.random.triangular(0, self.pckArrivalRate, 1)
+            pArrRate = self.np_rng.triangular(0, self.pckArrivalRate, 1)
             while pArrRate > self.tMax:
-                pArrRate = np.random.triangular(0, self.pckArrivalRate, 1)
+                pArrRate = self.np_rng.triangular(0, self.pckArrivalRate, 1)
         elif self.distributionArrival == "Poisson":
-            pArrRate = np.random.poisson(self.pckArrivalRate)
+            pArrRate = self.np_rng.poisson(self.pckArrivalRate)
             while pArrRate > self.tMax:
-                pArrRate = np.random.poisson(self.pckArrivalRate)
+                pArrRate = self.np_rng.poisson(self.pckArrivalRate)
         elif self.distributionArrival == "Binomial":
-            pArrRate = np.random.binomial(1, self.pckArrivalRate)
+            pArrRate = self.np_rng.binomial(1, self.pckArrivalRate)
             while pArrRate > self.tMax:
-                pArrRate = np.random.binomial(1, self.pckArrivalRate)
+                pArrRate = self.np_rng.binomial(1, self.pckArrivalRate)
         elif self.distributionArrival == "Geometric":
-            pArrRate = np.random.geometric(self.pckArrivalRate)
+            pArrRate = self.np_rng.geometric(self.pckArrivalRate)
             while pArrRate > self.tMax:
-                pArrRate = np.random.geometric(self.pckArrivalRate)
+                pArrRate = self.np_rng.geometric(self.pckArrivalRate)
         elif self.distributionArrival == "NegativeBinomial":
-            pArrRate = np.random.negative_binomial(1, self.pckArrivalRate)
+            pArrRate = self.np_rng.negative_binomial(1, self.pckArrivalRate)
             while pArrRate > self.tMax:
-                pArrRate = np.random.negative_binomial(1, self.pckArrivalRate)
+                pArrRate = self.np_rng.negative_binomial(1, self.pckArrivalRate)
 
         return pArrRate
 
     def setMeassures(self, tsim):
-        """This method calculates average PLR and throughput for the simulation."""
-        self.meassuredKPI["PacketLossRate"] = (
-            float(100 * self.lostPackets) / self.sentPackets
-        )
-        if tsim > 1000:
-            self.meassuredKPI["Throughput"] = (float(self.rcvdBytes) * 8000) / (
-                0.83 * tsim * 1024 * 1024
+        """
+        Calculate average PLR and throughput
+        for the simulation.
+        """
+
+        if self.sentPackets > 0:
+            self.meassuredKPI[
+                "PacketLossRate"
+            ] = (
+                float(
+                    100
+                    * self.lostPackets
+                )
+                / self.sentPackets
             )
         else:
-            self.meassuredKPI["Throughput"] = 0
+            self.meassuredKPI[
+                "PacketLossRate"
+            ] = 0.0
+
+        if self.experiment_config is None:
+            duration_factor = 0.83
+        else:
+            duration_factor = 1.0
+
+        if tsim > 1000:
+            self.meassuredKPI[
+                "Throughput"
+            ] = (
+                float(
+                    self.rcvdBytes
+                )
+                * 8000
+            ) / (
+                duration_factor
+                * tsim
+                * 1024
+                * 1024
+            )
+        else:
+            self.meassuredKPI[
+                "Throughput"
+            ] = 0
 
 
 class Packet:
@@ -662,8 +937,27 @@ class RadioLink:
         """This method updates UE link quality in terms of SINR during the simulation. This is a PEM method.
         During the simulation it is assumed that UE SINR varies following a normal distribution with mean value equal to initial SINR value, and a small variance.
         """
-        while env.now < (tSim * 0.83):
-            yield env.timeout(udIntrv)
+        if self.radio_scenario is None:
+            end_time = tSim * 0.83
+        else:
+            end_time = tSim
+
+        while env.now < end_time:
+            remaining = (
+                end_time - env.now
+            )
+
+            if remaining <= 0:
+                break
+
+            step = min(
+                float(udIntrv),
+                float(remaining),
+            )
+
+            yield env.timeout(
+                step
+            )
 
             if self.radio_scenario is not None:
                 self.linkQuality = (

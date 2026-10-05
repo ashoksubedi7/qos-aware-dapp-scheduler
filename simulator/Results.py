@@ -10,7 +10,9 @@ import seaborn as sns
 
 from Cell import Format
 from UE import *
-
+from metrics.packet_accounting import (
+    collect_packet_accounting,
+)
 
 def initialSinrGenerator(n_ues, refValue):
     """Auxiliary method for SINR generation.
@@ -104,7 +106,7 @@ class UEgroup:
                 env,
                 self.activationTime,
                 self.deactivationTime,
-                self.distributionSize, 
+                self.distributionSize,
                 self.distributionArrival,
                 self.schedulingDeadline,
                 self.experiment_config,
@@ -122,7 +124,7 @@ class UEgroup:
                 env,
                 self.activationTime,
                 self.deactivationTime,
-                self.distributionSize, 
+                self.distributionSize,
                 self.distributionArrival,
                 self.schedulingDeadline,
                 self.experiment_config,
@@ -148,6 +150,16 @@ class UEgroup:
         self, dir, num_users, p_size, p_arr_rate, sinr_0, cell, t_sim, measInterv, env, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline=None, experiment_config=None
     ):
         """This method creates the UEs with its traffic flows, and initializes the asociated PEM methods"""
+        if experiment_config is None:
+            radio_update_interval = (
+                measInterv
+            )
+        else:
+            radio_update_interval = (
+                experiment_config
+                .radio_update_interval_ms
+            )
+
         users = []
         flows = []
         procFlow = []
@@ -164,10 +176,12 @@ class UEgroup:
                     experiment_config=experiment_config,
                     slice_name=self.label,
                     t_sim=t_sim,
-                    radio_update_interval=measInterv,
+                    radio_update_interval=(
+                        radio_update_interval
+                    ),
                 )
             )
-            flows.append(PacketFlow(1, p_size, p_arr_rate, ue_name, dir, self.label, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline))
+            flows.append(PacketFlow(1, p_size, p_arr_rate, ue_name, dir, self.label, activationTime, deactivationTime, distributionSize, distributionArrival, schedulingDeadline, experiment_config=experiment_config))
             users[j].addPacketFlow(flows[j])
             users[j].packetFlows[0].setQosFId(1)
             # Flow, UE and RL PEM activation
@@ -178,7 +192,7 @@ class UEgroup:
             procRL.append(
                 env.process(
                     users[j].radioLinks.updateLQ(
-                        env, udIntrv=measInterv, tSim=t_sim, fl=False, u=num_users, r=""
+                        env, udIntrv=radio_update_interval, tSim=t_sim, fl=False, u=num_users, r=""
                     )
                 )
             )
@@ -198,7 +212,7 @@ class UEgroup:
     def printSliceResults(self, interSliceSche, t_sim, bw, measInterv):
         """This method prints main simulation results on the terminal, gets the considered kpi from the statistic files, and builds kpi plots"""
         if self.num_usersDL > 0:
-            
+
             printResults(
                 "DL",
                 self.usersDL,
@@ -240,7 +254,7 @@ class UEgroup:
                 len(list(interSliceSche.slices.keys())),
             )
 
-            
+
             makePlotsInter(
                 "DL",
                 times_DL,
@@ -254,7 +268,7 @@ class UEgroup:
                 self.schIn,
                 self.gr,
             )
-        
+
         if self.num_usersUL > 0:
             printResults(
                 "UL",
@@ -311,10 +325,105 @@ class UEgroup:
             )
 
 
+def prepare_end_of_run_packet_accounting(
+    flow,
+    ue,
+    scheduler,
+):
+    """
+    Prepare packet accounting at simulation end.
+
+    Legacy runs preserve the original simulator behavior,
+    where unfinished packets are counted as lost.
+
+    AssuredQoS runs keep true drops separate from residual
+    packets and validate packet conservation.
+    """
+
+    experiment_config = getattr(
+        flow,
+        "experiment_config",
+        None,
+    )
+
+    if experiment_config is None:
+        # Historical simulator behavior for M0.
+        flow.lostPackets = (
+            flow.lostPackets
+            + len(
+                list(
+                    ue.pendingPckts.keys()
+                )
+            )
+            + len(
+                flow.appBuff.pckts
+            )
+            + len(
+                ue.bearers[
+                    0
+                ].buffer.pckts
+            )
+        )
+
+        # Preserve the original duplicate correction:
+        # a fragmented packet may appear both in
+        # pendingPckts and in the bearer queue.
+        for packet_id in list(
+            ue.pendingPckts.keys()
+        ):
+            for packet in (
+                ue.bearers[
+                    0
+                ].buffer.pckts
+            ):
+                if (
+                    packet_id
+                    == packet.secNum
+                ):
+                    flow.lostPackets -= 1
+
+        return None
+
+    accounting = (
+        collect_packet_accounting(
+            flow=flow,
+            ue=ue,
+            scheduler=scheduler,
+        )
+    )
+
+    if not accounting.conservation_ok:
+        raise RuntimeError(
+            "packet conservation failed "
+            f"for UE {ue.id}: "
+            f"generated="
+            f"{accounting.generated}, "
+            f"delivered="
+            f"{accounting.delivered}, "
+            f"dropped="
+            f"{accounting.dropped}, "
+            f"residual="
+            f"{accounting.residual}"
+        )
+
+    if (
+        accounting.untracked_residual
+        != 0
+    ):
+        raise RuntimeError(
+            "untracked residual packets "
+            f"for UE {ue.id}: "
+            f"{accounting.untracked_residual}"
+        )
+
+    return accounting
+
+
+
 def printResults(
     dir, users, num_users, scheduler, t_sim, singleRunMode, fileSINR, sinr
 ):
-    
+
     """This method prints main simulation results on the terminal"""
     PDRprom = 0.0
     SINRprom = 0.0
@@ -324,23 +433,38 @@ def printResults(
     # UEresults.write('SINR MCS BLER PLR TH ResUse'+'\n')
     print(Format.CGREEN + "Accumulated " + dir + " indicators by user:" + Format.CEND)
     for i in range(num_users):
-        # Count pending packets also as lost
-        users[i].packetFlows[0].lostPackets = (
-            users[i].packetFlows[0].lostPackets
-            + len(list(scheduler.ues[users[i].id].pendingPckts.keys()))
-            + len(users[i].packetFlows[0].appBuff.pckts)
-            + len(scheduler.ues[users[i].id].bearers[0].buffer.pckts)
+        flow = users[
+            i
+        ].packetFlows[0]
+
+        ue = scheduler.ues[
+            users[i].id
+        ]
+
+        accounting = (
+            prepare_end_of_run_packet_accounting(
+                flow=flow,
+                ue=ue,
+                scheduler=scheduler,
+            )
         )
-        for p in list(scheduler.ues[users[i].id].pendingPckts.keys()):
-            for pp in scheduler.ues[users[i].id].bearers[0].buffer.pckts:
-                if p == pp.secNum:
-                    users[i].packetFlows[0].lostPackets = (
-                        users[i].packetFlows[0].lostPackets - 1
-                    )
-        
-        users[i].packetFlows[0].setMeassures(t_sim)
-        PDRprom = PDRprom + users[i].packetFlows[0].meassuredKPI["PacketLossRate"]
-        THprom = THprom + users[i].packetFlows[0].meassuredKPI["Throughput"]
+        flow.setMeassures(
+            t_sim
+        )
+
+        PDRprom = (
+            PDRprom
+            + flow.meassuredKPI[
+                "PacketLossRate"
+            ]
+        )
+
+        THprom = (
+            THprom
+            + flow.meassuredKPI[
+                "Throughput"
+            ]
+        )
         if singleRunMode and fileSINR:
             sinrUser = float(users[i].radioLinks.lqAv) / users[i].radioLinks.totCount
         else:
@@ -350,17 +474,92 @@ def printResults(
         SINRprom = SINRprom + sinrUser
         MCSprom = MCSprom + float(users[i].MCS)
 
+        if accounting is not None:
+            generated = (
+                accounting.generated
+            )
+
+            delivered = (
+                accounting.delivered
+            )
+
+            dropped = (
+                accounting.dropped
+            )
+
+            residual = (
+                accounting.residual
+            )
+
+            if generated > 0:
+                completion_ratio = (
+                    delivered
+                    / generated
+                )
+
+                true_drop_ratio = (
+                    dropped
+                    / generated
+                )
+
+                residual_ratio = (
+                    residual
+                    / generated
+                )
+
+            else:
+                completion_ratio = 0.0
+                true_drop_ratio = 0.0
+                residual_ratio = 0.0
+
+            print(
+                "\tPacket accounting:"
+                + " Generated:"
+                + str(generated)
+                + " Delivered:"
+                + str(delivered)
+                + " Dropped:"
+                + str(dropped)
+                + " Residual:"
+                + str(residual)
+            )
+
+            print(
+                "\tPacket ratios:"
+                + " Completion:"
+                + str(
+                    round(
+                        completion_ratio,
+                        6,
+                    )
+                )
+                + " TrueDrop:"
+                + str(
+                    round(
+                        true_drop_ratio,
+                        6,
+                    )
+                )
+                + " Residual:"
+                + str(
+                    round(
+                        residual_ratio,
+                        6,
+                    )
+                )
+            )
+
         print(
             users[i].id
             + "\t"
             + Format.CYELLOW
             + " Sent Packets:"
             + Format.CEND
-            + str(users[i].packetFlows[0].sentPackets)
+             + str(flow.sentPackets)
             + Format.CYELLOW
             + " Lost Packets:"
             + Format.CEND
-            + str(users[i].packetFlows[0].lostPackets)
+            + str(flow.lostPackets)
         )
         print(
             "\t"
@@ -369,10 +568,24 @@ def printResults(
             + " MCSav: "
             + str(users[i].MCS)
             + " PLR: "
-            + str(round(users[i].packetFlows[0].meassuredKPI["PacketLossRate"], 2))
+            + str(
+                round(
+                    flow.meassuredKPI[
+                        "PacketLossRate"
+                    ],
+                    2,
+                )
+            )
             + " %"
             + " Throughput: "
-            + str(round(users[i].packetFlows[0].meassuredKPI["Throughput"], 2))
+            + str(
+                round(
+                    flow.meassuredKPI[
+                        "Throughput"
+                    ],
+                    2,
+                )
+            )
         )
 
         # UEresults.write(str(sinrUser)+' '+str(users[i].MCS)+' '+str(float(users[i].lostTB)/(users[i].TXedTB+users[i].lostTB))+' '+str(users[i].packetFlows[0].meassuredKPI['PacketLossRate']/100)+' '+str(users[i].packetFlows[0].meassuredKPI['Throughput'])+' '+str(users[i].resUse)+' '+str(int(float(users[i].tbsz)/8))+'\n')
@@ -469,7 +682,7 @@ def write_to_file(users, SINR, times, mcs, rU, plr, th):
         "plr": plr,
         "th": th
     })
-    
+
     # Write the dataframe to a file in columns
     df.to_csv('Statistics/modifiedFile', index=False, sep=' ', mode= 'a')
 
@@ -542,7 +755,7 @@ def getKPIsInter(dir, stFile, slices, num_slices):
             times[slice][len(times[slice]) - 1] - times[slice][len(times[slice]) - 2]
         )
         th[slice].append((float(rcvdBytes) * 8000) / (deltaT * 1024 * 1024))
-        
+
     return times, rU, plr, th, cnx, buf, met
 
 # function that saves th, time and slice label in a file
@@ -573,7 +786,7 @@ def makeTimePlot(u, plotName, plotType, xAx, yAx, slcLbl = 'non'):
         plt.plot(xAx[u], yAx[u], label="PLR(%) " + u)
     if plotType == "TH":
         #save in file the th and time
-        
+
         save_(yAx[u], xAx[u], u, 'Statistics/process/everyThroughput' + str(slcLbl), slcLbl)
 
         plt.plot(xAx[u], yAx[u], label="TH(Mbps) " + u)
@@ -595,8 +808,8 @@ def makeTimePlot(u, plotName, plotType, xAx, yAx, slcLbl = 'non'):
         plt.plot(xAx[u], yAx[u], label="Buffer de Paquetes " + u)
         save_(yAx[u], xAx[u], u, 'Statistics/process/packetBuffer')
         # increase the size of the label in the plot
-        
-        
+
+
     if plotType == "Metric":
         plt.plot(xAx[u], yAx[u], label="Metric " + u)
     #plt.legend(loc="upper right")
@@ -628,14 +841,14 @@ def makeIntraSlicePlot(plotName, plotType, xAx, yAx, slcLbl, bw, sch, gran):
 
     # increase tick label font size
     ax.tick_params(axis='both', which='major', labelsize=18)
-    
+
 
     ind = plotName.find("(")
     if ind != -1:
         fileName = plotName[0:ind]
     else:
         fileName = plotName
-    
+
     ''' plt.title(
         plotName
         + " | BAND="
@@ -659,7 +872,7 @@ def makeIntraSlicePlot(plotName, plotType, xAx, yAx, slcLbl, bw, sch, gran):
         + "|IntraSliceSched="
         + str(sch) + ".svg"
     )
-    
+
     plt.close()
 
 
@@ -677,7 +890,7 @@ def makeInterSlicePlot(plotName, plotType, xAx, yAx, bw, sch, gran):
     ax = plt.gca()
     plt.autoscale()
     #ax.xaxis.set_major_locator(MultipleLocator(gran))
-    
+
     #for line in ax.lines:
     #    line.set_linewidth(2)
     ax.xaxis.set_major_locator(MultipleLocator(CADA))
