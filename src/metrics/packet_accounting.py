@@ -289,3 +289,91 @@ def collect_packet_accounting(
             conservation_ok
         ),
     )
+@dataclass(frozen=True)
+class SlicePacketAccounting:
+    generated: int
+    delivered: int
+    dropped: int
+    residual: int
+
+    observed_residual: int
+    untracked_residual: int
+
+    conservation_ok: bool
+
+
+def collect_slice_packet_accounting(
+    slice_obj,
+):
+    """
+    Aggregate end-of-run packet accounting across all
+    downlink UEs in one slice.
+
+    Accounting is first validated independently per UE
+    so packet IDs from different UEs are never mixed.
+    """
+
+    generated = 0
+    delivered = 0
+    dropped = 0
+    residual = 0
+
+    observed_residual = 0
+    untracked_residual = 0
+
+    scheduler = slice_obj.schedulerDL
+
+    for ue in scheduler.ues.values():
+        if not ue.packetFlows:
+            continue
+
+        flow = ue.packetFlows[0]
+
+        accounting = collect_packet_accounting(
+            flow=flow,
+            ue=ue,
+            scheduler=scheduler,
+        )
+
+        if not accounting.conservation_ok:
+            raise RuntimeError(
+                "packet conservation failed "
+                f"for UE {ue.id}"
+            )
+
+        if accounting.untracked_residual != 0:
+            raise RuntimeError(
+                "untracked residual packets "
+                f"for UE {ue.id}: "
+                f"{accounting.untracked_residual}"
+            )
+
+        generated += accounting.generated
+        delivered += accounting.delivered
+        dropped += accounting.dropped
+        residual += accounting.residual
+
+        observed_residual += (
+            accounting.observed_residual
+        )
+
+        untracked_residual += (
+            accounting.untracked_residual
+        )
+
+    conservation_ok = (
+        generated
+        == delivered
+        + dropped
+        + residual
+    )
+
+    return SlicePacketAccounting(
+        generated=generated,
+        delivered=delivered,
+        dropped=dropped,
+        residual=residual,
+        observed_residual=observed_residual,
+        untracked_residual=untracked_residual,
+        conservation_ok=conservation_ok,
+    )

@@ -29,23 +29,75 @@ def slice_mean_sinr(slice_obj):
     ]
 
     return float(np.mean(values))
-def slice_max_hol_delay(slice_obj, now):
-    """Return the largest head-of-line waiting time across UEs."""
+def slice_max_hol_delay(
+    slice_obj,
+    now,
+):
+    """
+    Return the maximum waiting time among unique packets
+    that have not yet received their first scheduling
+    decision.
+
+    Both the application buffer and bearer buffer are
+    inspected because scheduling delay is measured from
+    packet generation time.
+
+    Already-scheduled packets are excluded, including
+    residual fragments of packets previously selected.
+    """
+
+    now = float(now)
+
     max_hol = 0.0
 
     for ue in slice_obj.schedulerDL.ues.values():
-        queue = ue.bearers[0].buffer.pckts
+        candidate_packets = []
 
-        if not queue:
-            continue
+        flow = ue.packetFlows[0]
 
-        oldest_packet = queue[0]
-        hol = float(now - oldest_packet.tIn)
+        candidate_packets.extend(
+            flow.appBuff.pckts
+        )
 
-        if hol > max_hol:
-            max_hol = hol
+        if ue.bearers:
+            candidate_packets.extend(
+                ue.bearers[0].buffer.pckts
+            )
 
-    return max_hol
+        seen_packet_ids = set()
+
+        for packet in candidate_packets:
+            packet_id = int(
+                packet.secNum
+            )
+
+            if packet_id in seen_packet_ids:
+                continue
+
+            seen_packet_ids.add(
+                packet_id
+            )
+
+            if packet.scheduled_at is not None:
+                continue
+
+            hol = (
+                now
+                - float(packet.tIn)
+            )
+
+            if hol < 0:
+                raise ValueError(
+                    "packet generation time "
+                    "cannot be in the future"
+                )
+
+            max_hol = max(
+                max_hol,
+                hol,
+            )
+
+    return float(max_hol)
 
 
 def normalize_backlog(

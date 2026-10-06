@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from IntraSliceSch import IntraSliceScheduler
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -11,6 +12,10 @@ from assured_interval import (
     snapshot_radio_counters,
     snapshot_slice_counters,
     snapshot_urllc_deadline,
+)
+
+from assured_interval import (
+    snapshot_radio_counters,
 )
 
 
@@ -120,3 +125,66 @@ def test_snapshot_deadline_counts():
     assert snapshot_urllc_deadline(
         slice_obj
     ) == (20, 5)
+def test_snapshot_radio_counters_sums_cumulative_prb_slots():
+    slices = {
+        "eMBB": SimpleNamespace(
+            schedulerDL=SimpleNamespace(
+                assuredPrbsUsed=30,
+                assuredPrbsAvailable=50,
+            )
+        ),
+        "URLLC": SimpleNamespace(
+            schedulerDL=SimpleNamespace(
+                assuredPrbsUsed=10,
+                assuredPrbsAvailable=20,
+            )
+        ),
+        "mMTC": SimpleNamespace(
+            schedulerDL=SimpleNamespace(
+                assuredPrbsUsed=5,
+                assuredPrbsAvailable=10,
+            )
+        ),
+    }
+
+    result = snapshot_radio_counters(
+        slices
+    )
+
+    assert result.used_prbs == 45
+    assert result.available_prbs == 80
+class FakeEnv:
+    def __init__(self):
+        self.now = 0.0
+
+    def timeout(self, value):
+        return value
+
+
+def test_scheduler_counts_available_prbs_once_per_tti():
+    scheduler = IntraSliceScheduler.__new__(
+        IntraSliceScheduler
+    )
+
+    scheduler.dbMd = False
+    scheduler.nrbUEmax = 7
+    scheduler.ttiByms = 1
+
+    scheduler.assuredPrbsAvailable = 0
+
+    scheduler.queueUpdate = lambda: None
+
+    env = FakeEnv()
+
+    process = scheduler.queuesOut(
+        env
+    )
+
+    # Advance only until the first yield.  The available
+    # PRB capacity for that TTI must already be counted.
+    next(process)
+
+    assert (
+        scheduler.assuredPrbsAvailable
+        == 7
+    )

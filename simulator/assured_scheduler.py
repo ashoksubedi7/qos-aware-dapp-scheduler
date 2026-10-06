@@ -53,7 +53,9 @@ from metrics.transition_metrics import (
 from reward.assured_reward import (
     compute_assured_reward,
 )
-
+from metrics.starvation_metrics import (
+    StarvationTracker,
+)
 
 class AssuredScheduler(InterSliceScheduler):
     """
@@ -209,6 +211,21 @@ class AssuredScheduler(InterSliceScheduler):
 
         self.embb_starvation_ms = 0.0
         self.mmtc_starvation_ms = 0.0
+        self.embb_starvation_tracker = (
+            StarvationTracker(
+                threshold_ms=(
+                    self.starvation_threshold_ms
+                )
+            )
+        )
+
+        self.mmtc_starvation_tracker = (
+            StarvationTracker(
+                threshold_ms=(
+                    self.starvation_threshold_ms
+                )
+            )
+        )
 
         self.action = 0
         self.reward = 0.0
@@ -369,6 +386,22 @@ class AssuredScheduler(InterSliceScheduler):
                 interval_ms=self.granularity,
                 threshold_ms=self.starvation_threshold_ms,
             )
+        )
+
+        self.embb_starvation_tracker.update(
+            backlog_before=(
+                before["eMBB"].backlog
+            ),
+            delivered_bytes=embb_bytes,
+            interval_ms=self.granularity,
+        )
+
+        self.mmtc_starvation_tracker.update(
+            backlog_before=(
+                before["mMTC"].backlog
+            ),
+            delivered_bytes=mmtc_bytes,
+            interval_ms=self.granularity,
         )
 
         return max(
@@ -537,7 +570,7 @@ class AssuredScheduler(InterSliceScheduler):
                     self.granularity
                 )
                 continue
-                
+
             self.record_normalization_diagnostics(
                 env.now
             )
