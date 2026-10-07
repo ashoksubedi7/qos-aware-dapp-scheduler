@@ -426,13 +426,17 @@ class slice_framework:
         return True
 # other useful functions
 
-def getTbs(Ninfo: int, r: float) -> int:
+def getTbs(
+    Ninfo: int,
+    r: float,
+    tbs_table,
+) -> int:
     """
     Calculates the transport block size (TBS) for a given amount of information to be transmitted and target code rate.
 
-    :param Ninfo: An integer representing the amount of information to be transmitted.
-    :param r: A float representing the target code rate.
-    :return: An integer representing the calculated TBS value.
+    :param Ninfo: Amount of information to be transmitted.
+    :param r: Target code rate.
+    :return: Preloaded transport block size lookup table.
 
     If Ninfo is less than 24, return 0. If Ninfo is between 24 and 3824, find the largest TBS value in the TBS table
     that is less than Ninfo and return it. If Ninfo is greater than 3824, calculate TBS value based on the given formula.
@@ -447,9 +451,13 @@ def getTbs(Ninfo: int, r: float) -> int:
     # If the amount of information to be transmitted is between 24 and 3824, find the largest TBS (Transport Block Size) value in the TBS table
     # that is less than Ninfo and return it
     if Ninfo <= 3824:
-        for i in range(len(self.tbsTable)):
-            if Ninfo < self.tbsTable[i]:
-                return self.tbsTable[i-1]
+        for i in range(
+            len(tbs_table)
+        ):
+            if Ninfo < tbs_table[i]:
+                return tbs_table[
+                    i - 1
+                ]
 
     # If the amount of information to be transmitted is greater than 3824, calculate TBS value based on the given formula
     else:

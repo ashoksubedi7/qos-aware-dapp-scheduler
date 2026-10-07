@@ -325,59 +325,176 @@ class IntraSliceScheduler:
         return packets
 
     def dataPtoTB(self, u):
-        """This method takes UE data bytes, builds TB and puts them in the scheduler TB queue."""
+        """
+        Build and commit one fresh data TB transactionally.
+
+        Packet removal and first-scheduling bookkeeping are
+        committed only when TB insertion succeeds. If insertion
+        fails, all selected packets are restored to the bearer
+        buffer in their original order.
+        """
+
         n = self.ues[u].prbs
-        [tbSbits, mod, bits, mcs__] = self.setMod(u, n)
-        if self.schType[0:2] == "PF" or self.schType[0:2] == "SV":
-            if len(self.ues[u].pastTbsz) > self.promLen:
-                self.ues[u].pastTbsz.popleft()
-            self.ues[u].pastTbsz.append(self.ues[u].tbsz)
+
+        [
+            tbSbits,
+            mod,
+            bits,
+            mcs__,
+        ] = self.setMod(
+            u,
+            n,
+        )
+
+        if (
+            self.schType[0:2] == "PF"
+            or self.schType[0:2] == "SV"
+        ):
+            if (
+                len(
+                    self.ues[u].pastTbsz
+                )
+                > self.promLen
+            ):
+                self.ues[
+                    u
+                ].pastTbsz.popleft()
+
+            self.ues[
+                u
+            ].pastTbsz.append(
+                self.ues[u].tbsz
+            )
 
         self.ues[u].tbsz = tbSbits
         self.ues[u].MCS = mcs__
-        self.setBLER(u)
-        tbSize = int(float(tbSbits) / 8)  # TB size in bytes
+
+        self.setBLER(
+            u
+        )
+
+        tbSize = int(
+            float(tbSbits)
+            / 8
+        )
+
         self.printDebDataDM(
             "TBs: "
             + str(tbSize)
             + " nrb: "
             + str(n)
             + " FreeSp: "
-            + str(self.queue.getFreeSpace())
+            + str(
+                self.queue.getFreeSpace()
+            )
             + "<br>"
         )
+
         pks_s = 0
         list_p = []
+        selected_packets = []
 
-        while pks_s < tbSize and len(self.ues[u].bearers[0].buffer.pckts) > 0:
-            pacD = self.ues[u].bearers[0].buffer.removePckt()
-            self.ues[u].insertPckt(pacD)
-            pks_s = pks_s + pacD.size  # + 2
-
-            self.ues[u].delay = self.env.now - pacD.tIn
-
-            flow = self.ues[u].packetFlows[0]
-            flow.recordSchedulingOutcome(
-                pacD,
-                self.env.now,
-            )
-            """
-            self.ues[u].delay = 1 + (self.env.now - pacD.tIn)
-            self.ues[u].throughput +=  pacD.size*8000/(1024*1024*self.ues[u].delay)
-            """
-            list_p.append(pacD.secNum)
-
-        insrt = self.insertTB(
-            self.ues[u].TBid, mod, u, "data", list_p, n, min(int(pks_s), tbSize)
+        bearer_buffer = (
+            self.ues[
+                u
+            ].bearers[
+                0
+            ].buffer
         )
 
-        # utilization = (pks_s / tbSize)
+        while (
+            pks_s < tbSize
+            and len(
+                bearer_buffer.pckts
+            ) > 0
+        ):
+            packet = (
+                bearer_buffer
+                .removePckt()
+            )
+
+            if packet is None:
+                break
+
+            selected_packets.append(
+                packet
+            )
+
+            pks_s += packet.size
+
+            list_p.append(
+                packet.secNum
+            )
+
+        if not selected_packets:
+            return 0
+
+        inserted = self.insertTB(
+            self.ues[u].TBid,
+            mod,
+            u,
+            "data",
+            list_p,
+            n,
+            min(
+                int(pks_s),
+                tbSize,
+            ),
+        )
+
+        if not inserted:
+            # Roll back exactly to the bearer state that
+            # existed before this TB construction attempt.
+            for packet in reversed(
+                selected_packets
+            ):
+                bearer_buffer.insertPcktLeft(
+                    packet
+                )
+
+            return 0
+
+        # The TB is now committed. Only now may these packets
+        # count as having been selected by the scheduler.
+        flow = self.ues[
+            u
+        ].packetFlows[
+            0
+        ]
+
+        for packet in selected_packets:
+            self.ues[u].delay = (
+                self.env.now
+                - packet.tIn
+            )
+
+            flow.recordSchedulingOutcome(
+                packet,
+                self.env.now,
+            )
+
         self.pks_s += pks_s
         self.tbSize += tbSize
 
-        if (pks_s - tbSize) > 0:
-            pacD.size = pks_s - tbSize
-            self.ues[u].bearers[0].buffer.insertPcktLeft(pacD)
+        # Only the final selected packet can extend beyond the
+        # TB payload. Reinsert its unsent residual at the head
+        # of the bearer queue.
+        if pks_s > tbSize:
+            residual_packet = (
+                selected_packets[
+                    -1
+                ]
+            )
+
+            residual_packet.size = (
+                pks_s
+                - tbSize
+            )
+
+            bearer_buffer.insertPcktLeft(
+                residual_packet
+            )
+
         return n
 
     # makes a moving average of the current utilization and the last 10 utilization values
@@ -538,11 +655,19 @@ class IntraSliceScheduler:
         if self.mimomd == "SU":
             Ninfo = Nre__ * nprb * r * qm * self.nlayers
             # tbs = Ninfo
-            tbs = getTbs(Ninfo,r)
+            tbs = getTbs(
+                Ninfo,
+                r,
+                self.tbsTable,
+            )
         else:
             Ninfo = Nre__ * nprb * r * qm
 
-            tbs = getTbs(Ninfo,r)
+            tbs = getTbs(
+                Ninfo,
+                r,
+                self.tbsTable,
+            )
 
         #print("tbs, ninfo, r, qm, nprb, Nre__, self.nlayers: ", tbs, Ninfo, r, qm, nprb, Nre__, self.nlayers)
         return tbs
@@ -551,10 +676,8 @@ class IntraSliceScheduler:
     def setBLER(self, u):  # BLER calculation
         self.ues[u].bler = 0.0
 
-    def insertTB(self, id, m, uu, type, pack_lst, n, s):
-        tb = TransportBlock(id, m, uu, type, pack_lst, n, s)
-        succ = self.queue.insertTB(tb)
-        tb = TransportBlock(
+    def insertTB(
+        self,
         id,
         m,
         uu,
@@ -562,7 +685,16 @@ class IntraSliceScheduler:
         pack_lst,
         n,
         s,
-    )
+    ):
+        tb = TransportBlock(
+            id,
+            m,
+            uu,
+            type,
+            pack_lst,
+            n,
+            s,
+        )
 
         succ = self.queue.insertTB(
             tb
@@ -597,8 +729,6 @@ class IntraSliceScheduler:
                     ] = 1
 
         return succ
-
-    # Print methods -----------------------------------------
 
     def printQstate(self, env):
         if self.dbMd:
