@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
+from UE import Packet, PcktQueue, UE
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -494,3 +494,155 @@ def test_slice_packet_accounting_rejects_untracked_residual():
         collect_slice_packet_accounting(
             slice_obj
         )
+def test_multiple_true_drops_increment_lost_packets():
+    flow = make_flow()
+
+    flow.generatedPacketIds.update(
+        {
+            11,
+            12,
+        }
+    )
+
+    assert (
+        flow.recordPacketDrop(
+            11
+        )
+        is True
+    )
+
+    assert flow.lostPackets == 1
+
+    assert (
+        flow.recordPacketDrop(
+            12
+        )
+        is True
+    )
+
+    assert flow.lostPackets == 2
+
+    # Duplicate classification must remain idempotent.
+    assert (
+        flow.recordPacketDrop(
+            12
+        )
+        is False
+    )
+
+    assert flow.lostPackets == 2
+def test_queue_data_packet_multiple_overflows_preserve_drop_count():
+    flow = make_flow()
+
+    flow.sliceName = "URLLC"
+    flow.type = "DL"
+
+    packet_1 = Packet(
+        101,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet_2 = Packet(
+        102,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet_1.tIn = 1.0
+    packet_2.tIn = 2.0
+
+    flow.generatedPacketIds.update(
+        {
+            101,
+            102,
+        }
+    )
+
+    flow.packetGenerationTimes[
+        101
+    ] = 1.0
+
+    flow.packetGenerationTimes[
+        102
+    ] = 2.0
+
+    flow.appBuff.insertPckt(
+        packet_1
+    )
+
+    flow.appBuff.insertPckt(
+        packet_2
+    )
+
+    bearer_buffer = PcktQueue()
+
+    # Force the bearer to appear full before
+    # queueDataPckt() attempts admission.
+    existing_packet = Packet(
+        999,
+        1000,
+        0,
+        "ue1",
+    )
+
+    bearer_buffer.insertPckt(
+        existing_packet
+    )
+
+    fake_ue = SimpleNamespace(
+        id="ue1",
+        packetFlows=[
+            flow
+        ],
+        bearers=[
+            SimpleNamespace(
+                buffer=bearer_buffer
+            )
+        ],
+    )
+
+    fake_scheduler = SimpleNamespace(
+        ues={
+            "ue1": fake_ue
+        },
+        printDebDataDM=(
+            lambda *args, **kwargs: None
+        ),
+    )
+
+    fake_slice = SimpleNamespace(
+        schedulerDL=fake_scheduler
+    )
+
+    fake_cell = SimpleNamespace(
+        maxBuffUE=100,
+        interSliceSched=SimpleNamespace(
+            slices={
+                "URLLC": fake_slice
+            }
+        ),
+    )
+
+    UE.queueDataPckt(
+        fake_ue,
+        fake_cell,
+    )
+
+    assert flow.lostPackets == 1
+    assert 101 in flow.droppedPacketIds
+
+    UE.queueDataPckt(
+        fake_ue,
+        fake_cell,
+    )
+
+    assert flow.lostPackets == 2
+    assert 102 in flow.droppedPacketIds
+
+    assert flow.droppedPacketIds == {
+        101,
+        102,
+    }

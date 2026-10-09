@@ -215,10 +215,8 @@ class UE:
                     + str(pD.tIn)
                     + "</b></p>"
                 )
-            self.packetFlows[0].lostPackets = (
-                self.packetFlows[0].recordPacketDrop(
-                    pD.secNum
-                )
+            self.packetFlows[0].recordPacketDrop(
+                pD.secNum
             )
 
     def releaseConnection(self, cl):
@@ -274,6 +272,8 @@ class PacketFlow:
         self.deadlineMisses = 0
         self.deadlineEvaluated = 0
         self.schedulingDelays = []
+        self.deadlineEvaluatedPacketIds = set()
+        self.deadlineMissPacketIds = set()
         self.deliveredPackets = 0
         self.deliveredBytes = 0
         self.activeDeliveredBytes = 0
@@ -318,23 +318,134 @@ class PacketFlow:
                     self.traffic_seed
                 )
             )
-    def recordSchedulingOutcome(self, packet, now):
-        """Record first-scheduling delay exactly once per packet."""
+
+
+    def _recordDeadlineOutcome(
+        self,
+        packet,
+        missed,
+    ):
+        """Record a scheduling-deadline outcome exactly once.
+
+        Returns True only when a new deadline outcome is recorded for this
+        packet.
+        """
+        if packet.deadline is None:
+            return False
+        packet_id = int(packet.secNum)
+        if packet_id in self.deadlineEvaluatedPacketIds:
+            return False
+        self.deadlineEvaluatedPacketIds.add(packet_id)
+        self.deadlineEvaluated += 1
+        packet.deadline_missed = bool(missed)
+        if missed:
+            self.deadlineMissPacketIds.add(packet_id)
+            self.deadlineMisses += 1
+        return True
+
+    def recordDeadlineCrossing(
+        self,
+        packet,
+        now,
+    ):
+        """Record an unscheduled packet as a deadline miss once its scheduling
+        deadline has been exceeded.
+
+        A packet exactly at its deadline is not late.
+        """
+        if packet.deadline is None:
+            return False
         if packet.scheduled_at is not None:
-            return
-        packet.scheduled_at = now
-        packet.scheduling_delay = now - packet.tIn
-        self.packetGenerationTimes.setdefault(
-            packet.secNum,
+            return False
+        packet_id = int(packet.secNum)
+        if packet_id in self.deadlineEvaluatedPacketIds:
+            return False
+        generation_time = self.packetGenerationTimes.get(
+            packet_id,
             packet.tIn,
         )
+        elapsed = float(now) - float(generation_time)
+        if elapsed <= float(packet.deadline):
+            return False
+        return self._recordDeadlineOutcome(
+            packet,
+            missed=True,
+        )
+
+    def recordUnscheduledDropDeadlineFailure(
+        self,
+        packet_id,
+    ):
+        """Record a deadline failure when a deadline-bearing packet is permanently
+        dropped before receiving its first scheduling decision.
+
+        A permanently dropped unscheduled packet can no longer satisfy its
+        scheduling deadline.
+        """
+        if self.schedulingDeadline is None:
+            return False
+        packet_id = int(packet_id)
+        if packet_id in self.deadlineEvaluatedPacketIds:
+            return False
+        self.deadlineEvaluatedPacketIds.add(packet_id)
+        self.deadlineMissPacketIds.add(packet_id)
+        self.deadlineEvaluated += 1
+        self.deadlineMisses += 1
+        return True
+
+
+    def recordSchedulingOutcome(
+        self,
+        packet,
+        now,
+    ):
+        """
+        Record first-scheduling delay exactly once.
+
+        Deadline accounting is also exactly once. A packet
+        may already have been classified as a miss by the
+        deadline-crossing monitor before it is eventually
+        scheduled.
+        """
+
+        if packet.scheduled_at is not None:
+            return
+
+        packet.scheduled_at = float(
+            now
+        )
+
+        packet.scheduling_delay = (
+            float(now)
+            - float(packet.tIn)
+        )
+
+        packet_id = int(
+            packet.secNum
+        )
+
+        self.packetGenerationTimes.setdefault(
+            packet_id,
+            float(packet.tIn),
+        )
+
         if packet.deadline is None:
             return
-        self.deadlineEvaluated += 1
-        self.schedulingDelays.append(packet.scheduling_delay)
-        packet.deadline_missed = packet.scheduling_delay > packet.deadline
-        if packet.deadline_missed:
-            self.deadlineMisses += 1
+
+        self.schedulingDelays.append(
+            packet.scheduling_delay
+        )
+
+        missed = (
+            packet.scheduling_delay
+            > float(packet.deadline)
+        )
+
+        self._recordDeadlineOutcome(
+            packet,
+            missed=missed,
+        )
+
 
     def recordDeliveryCompletion(
         self,
@@ -424,6 +535,13 @@ class PacketFlow:
             in self.droppedPacketIds
         ):
             return False
+        if (
+            packet_id
+            not in self.deadlineEvaluatedPacketIds
+        ):
+            self.recordUnscheduledDropDeadlineFailure(
+                packet_id
+            )
 
         self.droppedPacketIds.add(
             packet_id
@@ -555,6 +673,7 @@ class PacketFlow:
             active_end,
         )
 
+
     def queueAppPckt(self, env, tSim):  # --- PEM -----
         """This method creates packets according to the packet flow traffic profile and stores them in the application buffer."""
         ueN = int(self.ue[2:])  # number of UEs in simulation
@@ -585,14 +704,37 @@ class PacketFlow:
             self.sentPackets = self.sentPackets + 1
             size = self.getPsize()
             pD = Packet(self.pId, size + self.header, self.qosFlowId, self.ue)
-            self.generatedPacketIds.add(
-                int(pD.secNum)
+            packet_id = int(
+                pD.secNum
             )
+
+            pD.tIn = float(
+                env.now
+            )
+
+            pD.timestamp = float(
+                env.now
+            )
+
+            pD.deadline = (
+                self.schedulingDeadline
+            )
+
+            self.generatedPacketIds.add(
+                packet_id
+            )
+
+            self.packetGenerationTimes[
+                packet_id
+            ] = float(
+                pD.tIn
+            )
+
             self.pId = self.pId + 1
-            pD.tIn = env.now
-            pD.timestamp = env.now
-            pD.deadline = self.schedulingDeadline
-            self.appBuff.insertPckt(pD)
+
+            self.appBuff.insertPckt(
+                pD
+            )
             nextPackTime = self.getParrRate()
             yield env.timeout(nextPackTime)
 

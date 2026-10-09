@@ -86,7 +86,7 @@ def test_prb_utilization_clips():
 def test_starvation_accumulates():
     duration, penalty = starvation_penalty(
         backlog_before=10,
-        delivered_bytes=0,
+        scheduled_prbs=0,
         previous_starvation_ms=5,
         interval_ms=5,
         threshold_ms=20,
@@ -99,7 +99,7 @@ def test_starvation_accumulates():
 def test_starvation_resets_after_service():
     duration, penalty = starvation_penalty(
         backlog_before=10,
-        delivered_bytes=500,
+        scheduled_prbs=4,
         previous_starvation_ms=15,
         interval_ms=5,
         threshold_ms=20,
@@ -147,3 +147,14 @@ def test_throughput_mbps_scales_with_interval():
     assert value == pytest.approx(
         4.0
     )
+def test_empty_backlog_is_not_starvation():
+    duration, penalty = starvation_penalty(
+        backlog_before=0,
+        scheduled_prbs=0,
+        previous_starvation_ms=15,
+        interval_ms=5,
+        threshold_ms=20,
+    )
+
+    assert duration == 0.0
+    assert penalty == 0.0

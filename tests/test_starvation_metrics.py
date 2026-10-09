@@ -12,13 +12,13 @@ def test_starvation_accumulates_without_service():
 
     tracker.update(
         backlog_before=5,
-        delivered_bytes=0,
+        scheduled_prbs=0,
         interval_ms=2.0,
     )
 
     tracker.update(
         backlog_before=5,
-        delivered_bytes=0,
+        scheduled_prbs=0,
         interval_ms=2.0,
     )
 
@@ -41,7 +41,7 @@ def test_starvation_event_counted_once_when_threshold_crossed():
     for _ in range(10):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=1.0,
         )
 
@@ -60,7 +60,7 @@ def test_long_starvation_is_not_counted_multiple_times():
     for _ in range(25):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=1.0,
         )
 
@@ -87,7 +87,7 @@ def test_service_ends_starvation_event():
     for _ in range(5):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=1.0,
         )
 
@@ -95,7 +95,7 @@ def test_service_ends_starvation_event():
 
     tracker.update(
         backlog_before=5,
-        delivered_bytes=100,
+        scheduled_prbs=4,
         interval_ms=1.0,
     )
 
@@ -112,7 +112,7 @@ def test_second_starvation_period_creates_second_event():
     for _ in range(3):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=1.0,
         )
 
@@ -120,14 +120,14 @@ def test_second_starvation_period_creates_second_event():
 
     tracker.update(
         backlog_before=5,
-        delivered_bytes=100,
+        scheduled_prbs=4,
         interval_ms=1.0,
     )
 
     for _ in range(3):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=1.0,
         )
 
@@ -141,7 +141,7 @@ def test_backlog_zero_is_not_starvation():
 
     starving = tracker.update(
         backlog_before=0,
-        delivered_bytes=0,
+        scheduled_prbs=0,
         interval_ms=1.0,
     )
 
@@ -151,14 +151,14 @@ def test_backlog_zero_is_not_starvation():
     assert tracker.event_count == 0
 
 
-def test_delivery_prevents_starvation():
+def test_prb_service_prevents_starvation():
     tracker = StarvationTracker(
         threshold_ms=5.0
     )
 
     starving = tracker.update(
         backlog_before=10,
-        delivered_bytes=100,
+        scheduled_prbs=4,
         interval_ms=1.0,
     )
 
@@ -174,20 +174,20 @@ def test_starvation_tracks_maximum_event_duration():
     for _ in range(3):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=1.0,
         )
 
     tracker.update(
         backlog_before=5,
-        delivered_bytes=100,
+        scheduled_prbs=4,
         interval_ms=1.0,
     )
 
     for _ in range(7):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=1.0,
         )
 
@@ -223,6 +223,6 @@ def test_starvation_rejects_nonpositive_interval():
     ):
         tracker.update(
             backlog_before=5,
-            delivered_bytes=0,
+            scheduled_prbs=0,
             interval_ms=0.0,
         )

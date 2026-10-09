@@ -15,6 +15,47 @@ def slice_backlog(slice_obj):
         slice_obj.schedulerDL.updSumPcks()
     )
 
+def slice_backlog_bytes(slice_obj):
+    """
+    Return scheduler-visible DL bearer backlog in bytes.
+
+    Only bytes currently waiting in each UE's first
+    DL bearer queue are counted.
+
+    Application-buffer bytes and already committed /
+    in-flight transport-block bytes are not included.
+    """
+
+    total_bytes = 0.0
+
+    for ue in (
+        slice_obj
+        .schedulerDL
+        .ues
+        .values()
+    ):
+        if not ue.bearers:
+            continue
+
+        for packet in (
+            ue.bearers[
+                0
+            ].buffer.pckts
+        ):
+            size = float(
+                packet.size
+            )
+
+            if size < 0:
+                raise ValueError(
+                    "packet size cannot be negative"
+                )
+
+            total_bytes += size
+
+    return float(
+        total_bytes
+    )
 
 def slice_mean_sinr(slice_obj):
     """Return mean DL SINR across UEs in a slice."""

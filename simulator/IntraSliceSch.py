@@ -70,6 +70,7 @@ class IntraSliceScheduler:
         self.tbSize = 0
 
         self.rb_assigned = 0
+        self.assuredPrbsScheduled = 0
         self.assuredPrbsUsed = 0
         self.assuredPrbsAvailable = 0
 
@@ -453,7 +454,13 @@ class IntraSliceScheduler:
                 )
 
             return 0
-
+        # Count committed fresh-data MAC scheduling
+        # service at enqueue time. This occurs before
+        # the TTI yield, so it is attributable to the
+        # current AssuredQoS control interval.
+        self.assuredPrbsScheduled += int(
+            n
+        )
         # The TB is now committed. Only now may these packets
         # count as having been selected by the scheduler.
         flow = self.ues[
@@ -582,6 +589,13 @@ class IntraSliceScheduler:
             )
 
             if inserted:
+                # Retransmission is also MAC resource
+                # service, but signaling retransmissions
+                # must not clear data-starvation state.
+                if pending_tb.type == "data":
+                    self.assuredPrbsScheduled += int(
+                        pending_tb.numRB
+                    )
                 self.ues[
                     u
                 ].pendingTB.pop(

@@ -22,7 +22,7 @@ class StarvationTracker:
     def update(
         self,
         backlog_before,
-        delivered_bytes,
+        scheduled_prbs,
         interval_ms,
     ):
         if interval_ms <= 0:
@@ -33,7 +33,7 @@ class StarvationTracker:
 
         starving = (
             int(backlog_before) > 0
-            and int(delivered_bytes) <= 0
+            and int(scheduled_prbs) <= 0
         )
 
         if starving:

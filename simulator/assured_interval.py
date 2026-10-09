@@ -26,6 +26,11 @@ def snapshot_slice_counters(slice_obj):
         delivered_packets=delivered,
         delivered_bytes=delivered_bytes,
         backlog=backlog,
+        scheduled_prbs=int(
+            slice_obj
+            .schedulerDL
+            .assuredPrbsScheduled
+        ),
     )
 
 

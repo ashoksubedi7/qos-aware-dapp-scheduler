@@ -1,0 +1,128 @@
+AssuredQoS Backlog Normalization Calibration Protocol
+======================================================
+
+Purpose
+-------
+Select fixed normalization caps for the three raw backlog-byte
+features used by AssuredQoS M1/M2/M3.
+
+This protocol is fixed before collecting backlog-calibration data.
+
+Raw feature definition
+----------------------
+For each slice s at time t:
+
+B_s(t) = sum of packet.size over packets currently present in
+         the first DL bearer queue of all UEs belonging to slice s.
+
+Units: bytes.
+
+Included:
+- scheduler-visible bytes currently waiting in DL bearer queues
+- residual packet fragments returned to bearer queues
+
+Excluded:
+- application-buffer bytes
+- already committed/in-flight transport-block bytes
+- pending retransmission TB bytes
+- UE auxiliary-buffer data
+
+Calibration traffic scenarios
+-----------------------------
+BASELINE
+CONGESTED
+URLLC_HIGH
+SIMULTANEOUS_HIGH
+
+Seeds
+-----
+7
+17
+27
+
+Simulation conditions
+---------------------
+Active duration: 10000 ms
+Backlog sampling interval: 1 ms
+Samples used for calibration: active period only
+Drain samples: excluded
+Radio scenario: STATIC_GOOD
+Bandwidth: 10 MHz
+Frequency range: FR1
+Duplex: FDD
+Per-UE bearer-buffer limit: 81920 bytes
+Scheduler: deterministic base InterSliceScheduler
+
+Sampling phase
+--------------
+Sample once at each controller-equivalent 1-ms decision boundary,
+before the next inter-slice scheduling action.
+
+Expected samples:
+10000 samples per scenario/seed/slice.
+
+Cap-selection rule
+------------------
+Caps are selected separately for:
+- eMBB
+- URLLC
+- mMTC
+
+For every scenario/seed run and slice, compute the empirical
+99.9th percentile using:
+
+numpy.quantile(values, 0.999, method="higher")
+
+For slice s:
+
+run_q999_max =
+    maximum 99.9th percentile across all calibration runs.
+
+cap_bytes =
+    max(
+        1024,
+        ceil(run_q999_max / 1024) * 1024
+    )
+
+Thus each cap is rounded upward to the next 1-KiB boundary.
+
+Validation criterion
+--------------------
+For every individual scenario/seed/slice:
+
+fraction(raw_backlog_bytes > cap_bytes) <= 0.001
+
+The criterion must hold independently for every run, not only for
+the pooled calibration data.
+
+Reported descriptive statistics
+--------------------------------
+For every scenario/seed/slice report:
+- sample count
+- minimum
+- median
+- p90
+- p95
+- p99
+- p99.9
+- maximum
+- selected cap
+- number above cap
+- fraction above cap
+
+Also report pooled descriptive statistics per slice.
+
+Anti-leakage rule
+-----------------
+Held-out final evaluation results must not be used to select or
+increase normalization caps.
+
+If later training workloads intentionally exceed the calibration
+envelope, a new normalization protocol must be documented before
+using held-out evaluation results.
+
+Formal-verification implication
+-------------------------------
+After the byte caps are frozen, normalized backlog inputs will
+remain bounded in [0, 1]. Values above the physical calibration
+cap will deterministically clip to 1.0.

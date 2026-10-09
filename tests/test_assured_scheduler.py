@@ -1,10 +1,16 @@
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-
+from UE import Packet, PacketFlow
 import numpy as np
 import pytest
+from metrics.starvation_metrics import (
+    StarvationTracker,
+)
 
+from metrics.transition_metrics import (
+    SliceCounters,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -715,3 +721,373 @@ def test_evaluation_mode_blocks_replay_and_training(
             before,
             after,
         )
+def make_deadline_scanner_fixture(
+    app_packets=None,
+    bearer_packets=None,
+):
+    if app_packets is None:
+        app_packets = []
+
+    if bearer_packets is None:
+        bearer_packets = []
+
+    flow = PacketFlow(
+        1,
+        300,
+        0.6,
+        "ue1",
+        "DL",
+        "URLLC",
+        0,
+        1,
+        "Constant",
+        "Uniform",
+        1.0,
+    )
+
+    for packet in app_packets:
+        flow.appBuff.insertPckt(
+            packet
+        )
+
+    bearer = SimpleNamespace(
+        buffer=SimpleNamespace(
+            pckts=list(
+                bearer_packets
+            )
+        )
+    )
+
+    ue = SimpleNamespace(
+        packetFlows=[
+            flow
+        ],
+        bearers=[
+            bearer
+        ],
+    )
+
+    urllc_slice = SimpleNamespace(
+        schedulerDL=SimpleNamespace(
+            ues={
+                "ue1": ue
+            }
+        )
+    )
+
+    scheduler = (
+        AssuredScheduler.__new__(
+            AssuredScheduler
+        )
+    )
+
+    scheduler._canonical_slices = (
+        lambda: {
+            "URLLC": urllc_slice
+        }
+    )
+
+    return (
+        scheduler,
+        flow,
+        bearer,
+    )
+def test_deadline_scanner_detects_app_buffer_packet():
+    packet = Packet(
+        1,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet.tIn = 10.0
+    packet.deadline = 1.0
+
+    scheduler, flow, _ = (
+        make_deadline_scanner_fixture(
+            app_packets=[
+                packet
+            ]
+        )
+    )
+
+    flow.generatedPacketIds.add(
+        1
+    )
+
+    flow.packetGenerationTimes[
+        1
+    ] = 10.0
+
+    newly_evaluated = (
+        scheduler.evaluate_deadline_crossings(
+            11.1
+        )
+    )
+
+    assert newly_evaluated == 1
+    assert flow.deadlineEvaluated == 1
+    assert flow.deadlineMisses == 1
+    assert packet.deadline_missed is True
+
+
+def test_deadline_scanner_detects_bearer_buffer_packet():
+    packet = Packet(
+        1,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet.tIn = 10.0
+    packet.deadline = 1.0
+
+    scheduler, flow, _ = (
+        make_deadline_scanner_fixture(
+            bearer_packets=[
+                packet
+            ]
+        )
+    )
+
+    flow.generatedPacketIds.add(
+        1
+    )
+
+    flow.packetGenerationTimes[
+        1
+    ] = 10.0
+
+    newly_evaluated = (
+        scheduler.evaluate_deadline_crossings(
+            11.1
+        )
+    )
+
+    assert newly_evaluated == 1
+    assert flow.deadlineEvaluated == 1
+    assert flow.deadlineMisses == 1
+
+def make_starvation_test_scheduler():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    scheduler.granularity = 1.0
+    scheduler.starvation_threshold_ms = 10.0
+
+    scheduler.embb_starvation_ms = 0.0
+    scheduler.mmtc_starvation_ms = 0.0
+
+    scheduler.embb_starvation_tracker = (
+        StarvationTracker(
+            threshold_ms=10.0
+        )
+    )
+
+    scheduler.mmtc_starvation_tracker = (
+        StarvationTracker(
+            threshold_ms=10.0
+        )
+    )
+
+    return scheduler
+
+def test_starvation_uses_prb_delta_not_delivery():
+    scheduler = (
+        make_starvation_test_scheduler()
+    )
+
+    before = {
+        "eMBB": SliceCounters(
+            generated_packets=0,
+            delivered_packets=0,
+            delivered_bytes=100,
+            backlog=5,
+            scheduled_prbs=10,
+        ),
+        "mMTC": SliceCounters(
+            generated_packets=0,
+            delivered_packets=0,
+            delivered_bytes=0,
+            backlog=0,
+            scheduled_prbs=20,
+        ),
+    }
+
+    after = {
+        "eMBB": SliceCounters(
+            generated_packets=0,
+            delivered_packets=0,
+            # No successful delivery.
+            delivered_bytes=100,
+            backlog=5,
+            # Four PRBs were nevertheless used.
+            scheduled_prbs=14,
+        ),
+        "mMTC": SliceCounters(
+            generated_packets=0,
+            delivered_packets=0,
+            delivered_bytes=0,
+            backlog=0,
+            scheduled_prbs=20,
+        ),
+    }
+
+    penalty = scheduler.update_starvation(
+        before,
+        after,
+    )
+
+    assert scheduler.embb_starvation_ms == 0.0
+    assert scheduler.embb_starvation_tracker.total_ms == 0.0
+    assert penalty == 0.0
+
+def test_equal_cumulative_prbs_means_zero_interval_service():
+    scheduler = (
+        make_starvation_test_scheduler()
+    )
+
+    before = {
+        "eMBB": SliceCounters(
+            generated_packets=0,
+            delivered_packets=0,
+            delivered_bytes=100,
+            backlog=5,
+            scheduled_prbs=10,
+        ),
+        "mMTC": SliceCounters(
+            generated_packets=0,
+            delivered_packets=0,
+            delivered_bytes=0,
+            backlog=0,
+            scheduled_prbs=20,
+        ),
+    }
+
+    after = {
+        "eMBB": SliceCounters(
+            generated_packets=0,
+            delivered_packets=1,
+            # Delivery may complete from an earlier
+            # scheduling decision.
+            delivered_bytes=500,
+            backlog=5,
+            # No new PRB use in this interval.
+            scheduled_prbs=10,
+        ),
+        "mMTC": SliceCounters(
+            generated_packets=0,
+            delivered_packets=0,
+            delivered_bytes=0,
+            backlog=0,
+            scheduled_prbs=20,
+        ),
+    }
+
+    penalty = scheduler.update_starvation(
+        before,
+        after,
+    )
+
+    assert scheduler.embb_starvation_ms == 1.0
+    assert scheduler.embb_starvation_tracker.total_ms == 1.0
+    assert penalty == 0.1
+
+def test_deadline_scanner_deduplicates_same_packet():
+    packet = Packet(
+        1,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet.tIn = 10.0
+    packet.deadline = 1.0
+
+    scheduler, flow, _ = (
+        make_deadline_scanner_fixture(
+            app_packets=[
+                packet
+            ],
+            bearer_packets=[
+                packet
+            ],
+        )
+    )
+
+    flow.generatedPacketIds.add(
+        1
+    )
+
+    flow.packetGenerationTimes[
+        1
+    ] = 10.0
+
+    newly_evaluated = (
+        scheduler.evaluate_deadline_crossings(
+            11.1
+        )
+    )
+
+    assert newly_evaluated == 1
+    assert flow.deadlineEvaluated == 1
+    assert flow.deadlineMisses == 1
+
+    # Repeated scans must also be idempotent.
+    second = (
+        scheduler.evaluate_deadline_crossings(
+            12.0
+        )
+    )
+
+    assert second == 0
+    assert flow.deadlineEvaluated == 1
+    assert flow.deadlineMisses == 1
+
+
+def test_deadline_scanner_does_not_reclassify_scheduled_packet():
+    packet = Packet(
+        1,
+        300,
+        0,
+        "ue1",
+    )
+
+    packet.tIn = 10.0
+    packet.deadline = 1.0
+
+    scheduler, flow, bearer = (
+        make_deadline_scanner_fixture()
+    )
+
+    flow.generatedPacketIds.add(
+        1
+    )
+
+    flow.packetGenerationTimes[
+        1
+    ] = 10.0
+
+    flow.recordSchedulingOutcome(
+        packet,
+        10.5,
+    )
+
+    bearer.buffer.pckts.append(
+        packet
+    )
+
+    assert flow.deadlineEvaluated == 1
+    assert flow.deadlineMisses == 0
+
+    newly_evaluated = (
+        scheduler.evaluate_deadline_crossings(
+            12.0
+        )
+    )
+
+    assert newly_evaluated == 0
+    assert flow.deadlineEvaluated == 1
+    assert flow.deadlineMisses == 0
+    assert packet.deadline_missed is False

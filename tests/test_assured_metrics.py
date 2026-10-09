@@ -5,6 +5,15 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from assured_metrics import (
+    build_m1_state,
+    normalize_backlog,
+    normalize_sinr,
+    normalize_urllc_urgency,
+    slice_backlog_bytes,
+    slice_max_hol_delay,
+    slice_mean_sinr,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "simulator"))
@@ -617,4 +626,150 @@ def test_hol_rejects_future_generation_time():
         slice_max_hol_delay(
             slice_obj,
             now=10.0,
+        )
+
+def test_slice_backlog_bytes_sums_bearer_bytes():
+    ue1 = SimpleNamespace(
+        bearers=[
+            SimpleNamespace(
+                buffer=SimpleNamespace(
+                    pckts=deque(
+                        [
+                            SimpleNamespace(
+                                size=100
+                            ),
+                            SimpleNamespace(
+                                size=1200
+                            ),
+                        ]
+                    )
+                )
+            )
+        ]
+    )
+
+    ue2 = SimpleNamespace(
+        bearers=[
+            SimpleNamespace(
+                buffer=SimpleNamespace(
+                    pckts=deque(
+                        [
+                            SimpleNamespace(
+                                size=300
+                            ),
+                        ]
+                    )
+                )
+            )
+        ]
+    )
+
+    slice_obj = SimpleNamespace(
+        schedulerDL=SimpleNamespace(
+            ues={
+                "ue1": ue1,
+                "ue2": ue2,
+            }
+        )
+    )
+
+    assert (
+        slice_backlog_bytes(
+            slice_obj
+        )
+        == 1600.0
+    )
+
+def test_slice_backlog_bytes_excludes_app_buffer():
+    ue = SimpleNamespace(
+        packetFlows=[
+            SimpleNamespace(
+                appBuff=SimpleNamespace(
+                    pckts=deque(
+                        [
+                            SimpleNamespace(
+                                size=9000
+                            ),
+                        ]
+                    )
+                )
+            )
+        ],
+        bearers=[
+            SimpleNamespace(
+                buffer=SimpleNamespace(
+                    pckts=deque(
+                        [
+                            SimpleNamespace(
+                                size=400
+                            ),
+                        ]
+                    )
+                )
+            )
+        ],
+    )
+
+    slice_obj = SimpleNamespace(
+        schedulerDL=SimpleNamespace(
+            ues={
+                "ue1": ue
+            }
+        )
+    )
+
+    assert (
+        slice_backlog_bytes(
+            slice_obj
+        )
+        == 400.0
+    )
+
+def test_slice_backlog_bytes_handles_ue_without_bearer():
+    slice_obj = SimpleNamespace(
+        schedulerDL=SimpleNamespace(
+            ues={
+                "ue1": SimpleNamespace(
+                    bearers=[]
+                )
+            }
+        )
+    )
+
+    assert (
+        slice_backlog_bytes(
+            slice_obj
+        )
+        == 0.0
+    )
+
+def test_slice_backlog_bytes_rejects_negative_size():
+    slice_obj = SimpleNamespace(
+        schedulerDL=SimpleNamespace(
+            ues={
+                "ue1": SimpleNamespace(
+                    bearers=[
+                        SimpleNamespace(
+                            buffer=SimpleNamespace(
+                                pckts=[
+                                    SimpleNamespace(
+                                        size=-1
+                                    )
+                                ]
+                            )
+                        )
+                    ]
+                )
+            }
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "packet size cannot be negative"
+        ),
+    ):
+        slice_backlog_bytes(
+            slice_obj
         )

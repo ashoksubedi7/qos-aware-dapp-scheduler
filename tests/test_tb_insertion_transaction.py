@@ -1,13 +1,12 @@
+from collections import deque
 from types import SimpleNamespace
+
+import pytest
 
 from IntraSliceSch import (
     IntraSliceScheduler,
 )
 
-from collections import deque
-from types import SimpleNamespace
-
-import pytest
 
 class RecordingQueue:
     def __init__(
@@ -30,6 +29,7 @@ class RecordingQueue:
         self.inserted.append(
             tb
         )
+
         return True
 
 
@@ -43,6 +43,11 @@ def make_scheduler(
     )
 
     scheduler.queue = queue
+
+    # This counter must not be modified by
+    # generic insertTB(). It is updated only
+    # by committed data scheduling paths.
+    scheduler.assuredPrbsScheduled = 0
 
     scheduler.ues = {
         "ue1": SimpleNamespace(
@@ -76,8 +81,12 @@ def test_insert_tb_inserts_exactly_once():
     )
 
     assert result is True
+
     assert queue.calls == 1
-    assert len(queue.inserted) == 1
+
+    assert len(
+        queue.inserted
+    ) == 1
 
     assert (
         scheduler.ues[
@@ -89,8 +98,17 @@ def test_insert_tb_inserts_exactly_once():
     assert (
         scheduler.ues[
             "ue1"
-        ].pendingPckts[1]
+        ].pendingPckts[
+            1
+        ]
         == 1
+    )
+
+    # Generic insertion itself must not
+    # classify MAC scheduling service.
+    assert (
+        scheduler.assuredPrbsScheduled
+        == 0
     )
 
 
@@ -116,8 +134,13 @@ def test_failed_insert_does_not_create_pending_reference():
     )
 
     assert result is False
+
     assert queue.calls == 1
-    assert queue.inserted == []
+
+    assert (
+        queue.inserted
+        == []
+    )
 
     assert (
         scheduler.ues[
@@ -132,6 +155,13 @@ def test_failed_insert_does_not_create_pending_reference():
         ].pendingPckts
         == {}
     )
+
+    assert (
+        scheduler.assuredPrbsScheduled
+        == 0
+    )
+
+
 class TransactionPacketBuffer:
     def __init__(
         self,
@@ -141,7 +171,9 @@ class TransactionPacketBuffer:
             packets
         )
 
-    def removePckt(self):
+    def removePckt(
+        self,
+    ):
         if not self.pckts:
             return None
 
@@ -157,7 +189,9 @@ class TransactionPacketBuffer:
 
 
 class TransactionFlow:
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self.scheduled_ids = []
 
     def recordSchedulingOutcome(
@@ -185,7 +219,9 @@ class TransactionFlow:
 
 
 class TransactionQueue:
-    def getFreeSpace(self):
+    def getFreeSpace(
+        self,
+    ):
         return 10
 
 
@@ -260,6 +296,11 @@ def make_data_ptotb_scheduler(
     scheduler.pks_s = 0
     scheduler.tbSize = 0
 
+    # Cumulative committed data-scheduling
+    # PRBs used by AssuredQoS starvation
+    # accounting.
+    scheduler.assuredPrbsScheduled = 0
+
     scheduler.setMod = (
         lambda u, n: [
             800,
@@ -288,6 +329,8 @@ def make_data_ptotb_scheduler(
         flow,
         buffer,
     )
+
+
 def test_data_ptotb_failed_insert_restores_packets_without_scheduling():
     packet_1 = (
         make_transaction_packet(
@@ -322,6 +365,14 @@ def test_data_ptotb_failed_insert_restores_packets_without_scheduling():
 
     assert result == 0
 
+    # Failed TB admission is not
+    # successful scheduler service.
+    assert (
+        scheduler.assuredPrbsScheduled
+        == 0
+    )
+
+    # Original packet order must be restored.
     assert list(
         buffer.pckts
     ) == [
@@ -354,8 +405,17 @@ def test_data_ptotb_failed_insert_restores_packets_without_scheduling():
         == []
     )
 
-    assert scheduler.pks_s == 0
-    assert scheduler.tbSize == 0
+    assert (
+        scheduler.pks_s
+        == 0
+    )
+
+    assert (
+        scheduler.tbSize
+        == 0
+    )
+
+
 def test_data_ptotb_success_records_scheduling_after_commit():
     packet_1 = (
         make_transaction_packet(
@@ -415,6 +475,17 @@ def test_data_ptotb_success_records_scheduling_after_commit():
             5.0
         )
     )
+
+    # Successful committed fresh-data
+    # scheduling contributes PRBs.
+    assert (
+        scheduler.assuredPrbsScheduled
+        == scheduler.ues[
+            "ue1"
+        ].prbs
+    )
+
+
 def test_data_ptotb_success_reinserts_only_unsent_residual():
     packet_1 = (
         make_transaction_packet(
@@ -454,10 +525,15 @@ def test_data_ptotb_success_reinserts_only_unsent_residual():
     ) == 1
 
     residual = (
-        buffer.pckts[0]
+        buffer.pckts[
+            0
+        ]
     )
 
-    assert residual is packet_2
+    assert (
+        residual
+        is packet_2
+    )
 
     assert (
         residual.size
@@ -477,4 +553,75 @@ def test_data_ptotb_success_reinserts_only_unsent_residual():
         == pytest.approx(
             5.0
         )
+    )
+
+    assert (
+        scheduler.assuredPrbsScheduled
+        == scheduler.ues[
+            "ue1"
+        ].prbs
+    )
+
+
+def test_data_ptotb_scheduled_prbs_counter_is_cumulative():
+    packet_1 = (
+        make_transaction_packet(
+            packet_id=1,
+            size=40,
+        )
+    )
+
+    (
+        scheduler,
+        ue,
+        flow,
+        buffer,
+    ) = make_data_ptotb_scheduler(
+        packets=[
+            packet_1,
+        ],
+        insert_success=True,
+    )
+
+    result_1 = scheduler.dataPtoTB(
+        "ue1"
+    )
+
+    assert result_1 == 2
+
+    assert (
+        scheduler.assuredPrbsScheduled
+        == 2
+    )
+
+    packet_2 = (
+        make_transaction_packet(
+            packet_id=2,
+            size=40,
+        )
+    )
+
+    buffer.pckts.append(
+        packet_2
+    )
+
+    result_2 = scheduler.dataPtoTB(
+        "ue1"
+    )
+
+    assert result_2 == 2
+
+    # The counter is cumulative rather than
+    # an instantaneous per-TTI value.
+    assert (
+        scheduler.assuredPrbsScheduled
+        == 4
+    )
+
+    assert (
+        flow.scheduled_ids
+        == [
+            1,
+            2,
+        ]
     )

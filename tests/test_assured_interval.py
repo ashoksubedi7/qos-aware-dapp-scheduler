@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from IntraSliceSch import IntraSliceScheduler
+import simpy
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -9,7 +10,6 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "simulator"))
 
 from assured_interval import (
-    snapshot_radio_counters,
     snapshot_slice_counters,
     snapshot_urllc_deadline,
 )
@@ -23,6 +23,7 @@ class FakeScheduler:
     def __init__(self):
         self.ues = {}
         self.assuredPrbsUsed = 0
+        self.assuredPrbsScheduled = 0
         self.assuredPrbsAvailable = 0
         self._backlog = 0
 
@@ -54,6 +55,7 @@ def test_snapshot_slice_counters():
     scheduler = FakeScheduler()
     scheduler._backlog = 12
 
+    scheduler.assuredPrbsScheduled = 37
     scheduler.ues = {
         "ue1": make_ue(10, 7, 1000),
         "ue2": make_ue(20, 15, 2000),
@@ -71,7 +73,7 @@ def test_snapshot_slice_counters():
     assert counters.delivered_packets == 22
     assert counters.delivered_bytes == 3000
     assert counters.backlog == 12
-
+    assert counters.scheduled_prbs == 37
 
 def test_snapshot_radio_counters():
     s1 = SimpleNamespace(
@@ -187,4 +189,107 @@ def test_scheduler_counts_available_prbs_once_per_tti():
     assert (
         scheduler.assuredPrbsAvailable
         == 7
+    )
+def test_scheduled_prbs_visible_in_same_control_interval():
+    env = simpy.Environment()
+
+    scheduler = (
+        IntraSliceScheduler.__new__(
+            IntraSliceScheduler
+        )
+    )
+
+    scheduler.dbMd = False
+    scheduler.ttiByms = 1
+    scheduler.nrbUEmax = 10
+
+    scheduler.assuredPrbsScheduled = 0
+    scheduler.assuredPrbsUsed = 0
+    scheduler.assuredPrbsAvailable = 0
+
+    scheduler.sbFrNum = 0
+    scheduler.ues = {}
+
+    scheduler.queue = SimpleNamespace(
+        res=[]
+    )
+
+    scheduler.printDebDataDM = (
+        lambda *args, **kwargs: None
+    )
+
+    scheduler.updSumPcks = (
+        lambda: 0
+    )
+
+    def queue_update():
+        # Represent a successful committed
+        # data-TB scheduling decision made
+        # during this control interval.
+        scheduler.assuredPrbsScheduled += 5
+
+    scheduler.queueUpdate = queue_update
+
+    slice_obj = SimpleNamespace(
+        schedulerDL=scheduler
+    )
+
+    observed = {}
+
+    def controller():
+        before = snapshot_slice_counters(
+            slice_obj
+        )
+
+        used_before = (
+            scheduler.assuredPrbsUsed
+        )
+
+        yield env.timeout(1.0)
+
+        after = snapshot_slice_counters(
+            slice_obj
+        )
+
+        observed[
+            "scheduled_delta"
+        ] = (
+            after.scheduled_prbs
+            - before.scheduled_prbs
+        )
+
+        observed[
+            "used_delta"
+        ] = (
+            scheduler.assuredPrbsUsed
+            - used_before
+        )
+
+    # Important: controller is started first,
+    # matching the ordering that exposed the
+    # original used-PRB timing problem.
+    env.process(
+        controller()
+    )
+
+    env.process(
+        scheduler.queuesOut(
+            env
+        )
+    )
+
+    env.run(
+        until=1.01
+    )
+
+    assert (
+        observed["scheduled_delta"]
+        == 5
+    )
+
+    # Transmission consumption has not been
+    # needed to recognize scheduler service.
+    assert (
+        observed["used_delta"]
+        == 0
     )

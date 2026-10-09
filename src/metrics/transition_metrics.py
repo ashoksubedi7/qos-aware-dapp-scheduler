@@ -14,6 +14,7 @@ class SliceCounters:
     delivered_packets: int
     delivered_bytes: int
     backlog: int
+    scheduled_prbs: int = 0
 
 
 @dataclass

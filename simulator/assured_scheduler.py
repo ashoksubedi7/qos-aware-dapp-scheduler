@@ -310,6 +310,75 @@ class AssuredScheduler(InterSliceScheduler):
             raw_urgency
         )
 
+
+    def evaluate_deadline_crossings(
+        self,
+        now,
+    ):
+        """
+        Evaluate scheduling-deadline crossings for unique
+        unscheduled URLLC packets currently waiting in the
+        application or bearer queues.
+        """
+
+        slices = self._canonical_slices()
+
+        urllc = slices[
+            "URLLC"
+        ]
+
+        newly_evaluated = 0
+
+        for ue in (
+            urllc
+            .schedulerDL
+            .ues
+            .values()
+        ):
+            if not ue.packetFlows:
+                continue
+
+            flow = ue.packetFlows[
+                0
+            ]
+
+            candidate_packets = list(
+                flow.appBuff.pckts
+            )
+
+            if ue.bearers:
+                candidate_packets.extend(
+                    ue.bearers[
+                        0
+                    ].buffer.pckts
+                )
+
+            seen_packet_ids = set()
+
+            for packet in candidate_packets:
+                packet_id = int(
+                    packet.secNum
+                )
+
+                if (
+                    packet_id
+                    in seen_packet_ids
+                ):
+                    continue
+
+                seen_packet_ids.add(
+                    packet_id
+                )
+
+                if flow.recordDeadlineCrossing(
+                    packet,
+                    now,
+                ):
+                    newly_evaluated += 1
+
+        return newly_evaluated
+
+
     def snapshot_interval_state(self):
         slices = self._canonical_slices()
         return {
@@ -356,35 +425,59 @@ class AssuredScheduler(InterSliceScheduler):
         before,
         after,
     ):
-        embb_bytes = max(
+        embb_scheduled_prbs = max(
             0,
-            after["eMBB"].delivered_bytes
-            - before["eMBB"].delivered_bytes,
-        )
+            int(
+                after["eMBB"].scheduled_prbs
+            )
 
-        mmtc_bytes = max(
+            - int(
+               before["eMBB"].scheduled_prbs
+            ),
+        )
+        mmtc_scheduled_prbs = max(
             0,
-            after["mMTC"].delivered_bytes
-            - before["mMTC"].delivered_bytes,
+            int(
+                after["mMTC"].scheduled_prbs
+            )
+            - int(
+                before["mMTC"].scheduled_prbs,
+            ),
         )
 
         self.embb_starvation_ms, embb_penalty = (
             starvation_penalty(
-                backlog_before=before["eMBB"].backlog,
-                delivered_bytes=embb_bytes,
-                previous_starvation_ms=self.embb_starvation_ms,
+                backlog_before=(
+                    before["eMBB"].backlog
+                ),
+                scheduled_prbs=(
+                    embb_scheduled_prbs
+                ),
+                previous_starvation_ms=(
+                    self.embb_starvation_ms
+                ),
                 interval_ms=self.granularity,
-                threshold_ms=self.starvation_threshold_ms,
+                threshold_ms=(
+                    self.starvation_threshold_ms
+                ),
             )
         )
 
         self.mmtc_starvation_ms, mmtc_penalty = (
             starvation_penalty(
-                backlog_before=before["mMTC"].backlog,
-                delivered_bytes=mmtc_bytes,
-                previous_starvation_ms=self.mmtc_starvation_ms,
+                backlog_before=(
+                    before["mMTC"].backlog
+                ),
+                scheduled_prbs=(
+                    mmtc_scheduled_prbs
+                ),
+                previous_starvation_ms=(
+                    self.mmtc_starvation_ms
+                ),
                 interval_ms=self.granularity,
-                threshold_ms=self.starvation_threshold_ms,
+                threshold_ms=(
+                    self.starvation_threshold_ms
+                ),
             )
         )
 
@@ -392,7 +485,9 @@ class AssuredScheduler(InterSliceScheduler):
             backlog_before=(
                 before["eMBB"].backlog
             ),
-            delivered_bytes=embb_bytes,
+            scheduled_prbs=(
+                embb_scheduled_prbs
+            ),
             interval_ms=self.granularity,
         )
 
@@ -400,7 +495,9 @@ class AssuredScheduler(InterSliceScheduler):
             backlog_before=(
                 before["mMTC"].backlog
             ),
-            delivered_bytes=mmtc_bytes,
+            scheduled_prbs=(
+                mmtc_scheduled_prbs
+            ),
             interval_ms=self.granularity,
         )
 
@@ -579,6 +676,10 @@ class AssuredScheduler(InterSliceScheduler):
                 dtype=np.float32,
             )
 
+            self.evaluate_deadline_crossings(
+                env.now
+            )
+
             before = (
                 self.snapshot_interval_state()
             )
@@ -595,6 +696,10 @@ class AssuredScheduler(InterSliceScheduler):
 
             yield env.timeout(
                 self.granularity
+            )
+
+            self.evaluate_deadline_crossings(
+                env.now
             )
 
             after = (

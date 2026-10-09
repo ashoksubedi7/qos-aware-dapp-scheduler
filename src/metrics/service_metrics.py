@@ -78,16 +78,20 @@ def prb_utilization(
 
 def starvation_penalty(
     backlog_before,
-    delivered_bytes,
+    scheduled_prbs,
     previous_starvation_ms,
     interval_ms,
     threshold_ms,
 ):
     """
-    Update starvation duration and return a normalized penalty.
+    Update  MAC scheduling-starvation duration.
 
-    Starvation continues only when demand exists but no useful
-    application data is delivered during the interval.
+    Starvation continues only when scheduler visible
+    demand exists but the slice receives  zero actual
+    PRB service during the interval.
+
+    Successful packet delivery is intentionally not
+    used to determine scheduler starvation.
     """
     if interval_ms <= 0:
         raise ValueError("interval_ms must be greater than zero")
@@ -95,16 +99,21 @@ def starvation_penalty(
     if threshold_ms <= 0:
         raise ValueError("threshold_ms must be greater than zero")
 
-    if backlog_before > 0 and delivered_bytes <= 0:
+    if (
+        int(backlog_before) > 0
+        and int(scheduled_prbs) <= 0
+    ):
         starvation_ms = (
             float(previous_starvation_ms)
             + float(interval_ms)
         )
+
     else:
         starvation_ms = 0.0
 
     penalty = clamp01(
-        starvation_ms / float(threshold_ms)
+        starvation_ms
+        / float(threshold_ms)
     )
 
     return starvation_ms, penalty

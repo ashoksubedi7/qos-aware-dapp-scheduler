@@ -85,6 +85,7 @@ def make_scheduler(
     }
 
     scheduler.queue = queue
+    scheduler.assuredPrbsScheduled = 0
 
     return (
         scheduler,
