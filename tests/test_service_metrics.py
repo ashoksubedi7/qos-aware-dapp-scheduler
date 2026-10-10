@@ -76,11 +76,69 @@ def test_prb_utilization():
     )
 
 
-def test_prb_utilization_clips():
+def test_prb_utilization_rejects_usage_above_available():
+    with pytest.raises(
+        ValueError,
+        match="used_prbs cannot exceed available_prbs",
+    ):
+        prb_utilization(
+            used_prbs=120,
+            available_prbs=100,
+        )
+
+
+def test_prb_utilization_rejects_negative_usage():
+    with pytest.raises(
+        ValueError,
+        match="used_prbs must be non-negative",
+    ):
+        prb_utilization(
+            used_prbs=-1,
+            available_prbs=100,
+        )
+
+
+def test_prb_utilization_rejects_negative_availability():
+    with pytest.raises(
+        ValueError,
+        match="available_prbs must be non-negative",
+    ):
+        prb_utilization(
+            used_prbs=0,
+            available_prbs=-1,
+        )
+
+
+def test_prb_utilization_zero_over_zero_is_zero():
     assert prb_utilization(
-        used_prbs=120,
-        available_prbs=100,
-    ) == 1.0
+        used_prbs=0,
+        available_prbs=0,
+    ) == 0.0
+
+
+@pytest.mark.parametrize(
+    "used_prbs,available_prbs",
+    (
+        (float("nan"), 100),
+        (float("inf"), 100),
+        (float("-inf"), 100),
+        (0, float("nan")),
+        (0, float("inf")),
+        (0, float("-inf")),
+    ),
+)
+def test_prb_utilization_rejects_non_finite_inputs(
+    used_prbs,
+    available_prbs,
+):
+    with pytest.raises(
+        ValueError,
+        match="PRB accounting values must be finite",
+    ):
+        prb_utilization(
+            used_prbs=used_prbs,
+            available_prbs=available_prbs,
+        )
 
 
 def test_starvation_accumulates():

@@ -1,3 +1,5 @@
+from math import isfinite
+
 def clamp01(value):
     return max(0.0, min(1.0, float(value)))
 
@@ -67,12 +69,49 @@ def prb_utilization(
     used_prbs,
     available_prbs,
 ):
-    """Fraction of available PRB opportunities actually consumed."""
-    if available_prbs <= 0:
+    """
+    Fraction of available PRB opportunities actually consumed.
+
+    Invalid radio accounting fails closed rather than being silently
+    clipped into a valid utilization value.
+    """
+    used_prbs = float(
+        used_prbs
+    )
+
+    available_prbs = float(
+        available_prbs
+    )
+
+    if (
+        not isfinite(used_prbs)
+        or not isfinite(available_prbs)
+    ):
+        raise ValueError(
+            "PRB accounting values must be finite"
+        )
+
+    if used_prbs < 0:
+        raise ValueError(
+            "used_prbs must be non-negative"
+        )
+
+    if available_prbs < 0:
+        raise ValueError(
+            "available_prbs must be non-negative"
+        )
+
+    if used_prbs > available_prbs:
+        raise ValueError(
+            "used_prbs cannot exceed available_prbs"
+        )
+
+    if available_prbs == 0:
         return 0.0
 
-    return clamp01(
-        float(used_prbs) / float(available_prbs)
+    return (
+        used_prbs
+        / available_prbs
     )
 
 
