@@ -721,6 +721,128 @@ def test_evaluation_mode_blocks_replay_and_training(
             before,
             after,
         )
+
+
+class _TrainingProbeAgent:
+    def __init__(self, training_loss):
+        self.training_loss = training_loss
+        self.remember_calls = []
+        self.train_step_calls = 0
+        self.decay_epsilon_calls = 0
+
+    def remember(
+        self,
+        state,
+        action,
+        reward,
+        next_state,
+        done,
+    ):
+        self.remember_calls.append(
+            (
+                state,
+                action,
+                reward,
+                next_state,
+                done,
+            )
+        )
+
+    def train_step(self):
+        self.train_step_calls += 1
+        return self.training_loss
+
+    def decay_epsilon(self):
+        self.decay_epsilon_calls += 1
+
+
+def test_training_transition_does_not_decay_without_update():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    scheduler.config = SimpleNamespace(
+        training_mode=True
+    )
+
+    scheduler.agent = _TrainingProbeAgent(
+        training_loss=None
+    )
+
+    result = scheduler._train_transition(
+        state="state",
+        action=3,
+        reward=0.5,
+        next_state="next_state",
+    )
+
+    assert result is None
+
+    assert scheduler.agent.remember_calls == [
+        (
+            "state",
+            3,
+            0.5,
+            "next_state",
+            False,
+        )
+    ]
+
+    assert scheduler.agent.train_step_calls == 1
+    assert scheduler.agent.decay_epsilon_calls == 0
+
+
+def test_training_transition_decays_after_successful_update():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    scheduler.config = SimpleNamespace(
+        training_mode=True
+    )
+
+    scheduler.agent = _TrainingProbeAgent(
+        training_loss=0.125
+    )
+
+    result = scheduler._train_transition(
+        state="state",
+        action=4,
+        reward=0.25,
+        next_state="next_state",
+    )
+
+    assert result == 0.125
+    assert scheduler.agent.train_step_calls == 1
+    assert scheduler.agent.decay_epsilon_calls == 1
+
+
+def test_training_transition_is_inactive_in_evaluation_mode():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    scheduler.config = SimpleNamespace(
+        training_mode=False
+    )
+
+    scheduler.agent = _TrainingProbeAgent(
+        training_loss=0.125
+    )
+
+    result = scheduler._train_transition(
+        state="state",
+        action=5,
+        reward=0.75,
+        next_state="next_state",
+    )
+
+    assert result is None
+    assert scheduler.agent.remember_calls == []
+    assert scheduler.agent.train_step_calls == 0
+    assert scheduler.agent.decay_epsilon_calls == 0
+
+
 def make_deadline_scanner_fixture(
     app_packets=None,
     bearer_packets=None,

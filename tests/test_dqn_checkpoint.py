@@ -14,14 +14,20 @@ sys.path.insert(
 
 from agent.dqn_agent import DQNAgent
 from common.action_space import ACTION_SPACE_SIZE
+from config.dqn_hyperparameters import (
+    DQNHyperparameters,
+)
 
 def make_agent():
     return DQNAgent(
         input_dim=6,
         action_dim=ACTION_SPACE_SIZE,
+        hidden_units=(64, 64),
+        hyperparameters=DQNHyperparameters(
+            batch_size=1,
+            min_replay_size=1,
+        ),
         seed=7,
-        min_replay_size=1,
-        batch_size=1,
     )
 
 

@@ -50,8 +50,9 @@ def test_m1_architecture():
     definition = get_model_definition("M1")
 
     model = build_q_network(
-        definition["input_dim"],
-        definition["hidden_units"],
+        input_dim=definition["input_dim"],
+        hidden_units=definition["hidden_units"],
+        action_dim=definition["output_dim"],
     )
 
     assert model.input_shape == (None, 6)
@@ -62,8 +63,9 @@ def test_m2_architecture():
     definition = get_model_definition("M2")
 
     model = build_q_network(
-        definition["input_dim"],
-        definition["hidden_units"],
+        input_dim=definition["input_dim"],
+        hidden_units=definition["hidden_units"],
+        action_dim=definition["output_dim"],
     )
 
     assert model.input_shape == (None, 7)

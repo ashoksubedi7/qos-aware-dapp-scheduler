@@ -8,16 +8,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from agent.dqn_agent import DQNAgent
+from config.dqn_hyperparameters import (
+    DQNHyperparameters,
+)
 
 
 def make_agent(input_dim=6):
     return DQNAgent(
         input_dim=input_dim,
         action_dim=22,
-        replay_capacity=100,
-        batch_size=2,
-        min_replay_size=2,
-        target_update_interval=2,
+        hidden_units=(64, 64),
+        hyperparameters=DQNHyperparameters(
+            replay_capacity=100,
+            batch_size=2,
+            min_replay_size=2,
+            target_update_interval=2,
+        ),
         seed=7,
     )
 

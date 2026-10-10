@@ -1,4 +1,8 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+
+from config.dqn_hyperparameters import (
+    DQNHyperparameters,
+)
 
 
 VALID_MODEL_VARIANTS = (
@@ -42,6 +46,10 @@ class ExperimentConfig:
     starvation_threshold_ms: float = 10.0
 
     training_mode: bool = True
+
+    dqn_hyperparameters: DQNHyperparameters = field(
+        default_factory=DQNHyperparameters
+    )
 
     # Required when training_mode=False.
     #

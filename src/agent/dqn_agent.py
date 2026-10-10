@@ -7,6 +7,9 @@ import numpy as np
 from tensorflow.keras.optimizers import Adam
 
 from agent.q_network import build_q_network
+from config.dqn_hyperparameters import (
+    DQNHyperparameters,
+)
 
 
 class DQNAgent:
@@ -14,15 +17,8 @@ class DQNAgent:
         self,
         input_dim,
         action_dim,
-        learning_rate=1e-3,
-        gamma=0.99,
-        replay_capacity=100_000,
-        batch_size=64,
-        min_replay_size=1_000,
-        target_update_interval=250,
-        epsilon_start=1.0,
-        epsilon_min=0.05,
-        epsilon_decay=0.9995,
+        hidden_units,
+        hyperparameters,
         seed=None,
         self_evaluation_mode=False,
     ):
@@ -36,51 +32,65 @@ class DQNAgent:
                 "action_dim must be greater than zero"
             )
 
-        if not 0.0 <= gamma <= 1.0:
-            raise ValueError(
-                "gamma must be in [0, 1]"
-            )
-
-        if replay_capacity <= 0:
-            raise ValueError(
-                "replay_capacity must be greater than zero"
-            )
-
-        if batch_size <= 0:
-            raise ValueError(
-                "batch_size must be greater than zero"
-            )
-
-        if min_replay_size < batch_size:
-            raise ValueError(
-                "min_replay_size must be >= batch_size"
-            )
-
-        if target_update_interval <= 0:
-            raise ValueError(
-                "target_update_interval must be greater than zero"
-            )
-
         self.input_dim = int(input_dim)
         self.action_dim = int(action_dim)
 
-        self.gamma = float(gamma)
-        self.batch_size = int(batch_size)
-        self.min_replay_size = int(
-            min_replay_size
+        if not isinstance(
+            hyperparameters,
+            DQNHyperparameters,
+        ):
+            raise TypeError(
+                "hyperparameters must be a "
+                "DQNHyperparameters instance"
+            )
+
+        self.hidden_units = tuple(
+            int(value)
+            for value in hidden_units
         )
+
+        if len(self.hidden_units) != 2:
+            raise ValueError(
+                "AssuredQoS requires exactly "
+                "two hidden layers"
+            )
+
+        if any(
+            value <= 0
+            for value in self.hidden_units
+        ):
+            raise ValueError(
+                "hidden units must be positive"
+            )
+
+        self.hyperparameters = hyperparameters
+
+        self.gamma = float(
+            hyperparameters.gamma
+        )
+
+        self.batch_size = int(
+            hyperparameters.batch_size
+        )
+
+        self.min_replay_size = int(
+            hyperparameters.min_replay_size
+        )
+
         self.target_update_interval = int(
-            target_update_interval
+            hyperparameters.target_update_interval
         )
 
         self.epsilon = float(
-            epsilon_start
+            hyperparameters.epsilon_start
         )
+
         self.epsilon_min = float(
-            epsilon_min
+            hyperparameters.epsilon_min
         )
+
         self.epsilon_decay = float(
-            epsilon_decay
+            hyperparameters.epsilon_decay
         )
 
         self.rng = random.Random(seed)
@@ -89,27 +99,37 @@ class DQNAgent:
         )
 
         self.replay_buffer = deque(
-            maxlen=int(replay_capacity)
+            maxlen=int(
+                hyperparameters.replay_capacity
+            )
         )
 
         self.online_model = build_q_network(
             input_dim=self.input_dim,
+            hidden_units=self.hidden_units,
+            action_dim=self.action_dim,
         )
 
         self.target_model = build_q_network(
             input_dim=self.input_dim,
+            hidden_units=self.hidden_units,
+            action_dim=self.action_dim,
         )
 
         self.online_model.compile(
             optimizer=Adam(
-                learning_rate=learning_rate
+                learning_rate=(
+                    hyperparameters.learning_rate
+                )
             ),
             loss="mse",
         )
 
         self.target_model.compile(
             optimizer=Adam(
-                learning_rate=learning_rate
+                learning_rate=(
+                    hyperparameters.learning_rate
+                )
             ),
             loss="mse",
         )

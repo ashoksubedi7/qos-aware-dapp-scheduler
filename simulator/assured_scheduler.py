@@ -167,6 +167,12 @@ class AssuredScheduler(InterSliceScheduler):
                 "input_dim"
             ],
             action_dim=self.action_space_size,
+            hidden_units=self.model_definition[
+                "hidden_units"
+            ],
+            hyperparameters=(
+                self.config.dqn_hyperparameters
+            ),
             seed=self.config.seed,
         )
 
@@ -656,6 +662,41 @@ class AssuredScheduler(InterSliceScheduler):
             explore=self.config.training_mode,
         )
 
+    def _train_transition(
+        self,
+        state,
+        action,
+        reward,
+        next_state,
+    ):
+        """
+        Record one continuing-task transition and
+        perform one eligible DQN update.
+
+        Exploration decays only after a successful
+        optimizer update.
+        """
+
+        if not self.config.training_mode:
+            return None
+
+        self.agent.remember(
+            state,
+            action,
+            reward,
+            next_state,
+            False,
+        )
+
+        training_loss = (
+            self.agent.train_step()
+        )
+
+        if training_loss is not None:
+            self.agent.decay_epsilon()
+
+        return training_loss
+
     def resAlloc(self, env):
         """
         AssuredQoS inter-slice RL control loop.
@@ -737,14 +778,9 @@ class AssuredScheduler(InterSliceScheduler):
                 dtype=np.float32,
             )
 
-            if self.config.training_mode:
-                self.agent.remember(
-                    state,
-                    self.action,
-                    self.reward,
-                    next_state,
-                    False,
-                )
-
-                self.agent.train_step()
-                self.agent.decay_epsilon()
+            self._train_transition(
+                state=state,
+                action=self.action,
+                reward=self.reward,
+                next_state=next_state,
+            )
