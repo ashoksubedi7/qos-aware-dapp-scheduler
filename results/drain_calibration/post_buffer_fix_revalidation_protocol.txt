@@ -1,0 +1,191 @@
+AssuredQoS Post-Buffer-Fix Drain Revalidation Protocol
+=====================================================
+
+Purpose
+-------
+Revalidate the previously selected 1000-ms drain duration after
+correcting the per-UE bearer-buffer admission rule.
+
+The simulator previously admitted an incoming packet whenever the
+existing bearer occupancy was below the configured per-UE capacity.
+This could allow the incoming packet to push bearer occupancy above
+the configured 81920-byte limit.
+
+The corrected admission invariant is:
+
+    current_bearer_bytes + incoming_packet_bytes <= 81920
+
+Because this correction changes packet admission, packet drops,
+bearer occupancy, and potentially end-of-run residual behavior,
+the pre-fix drain calibration cannot by itself establish that the
+previously selected 1000-ms drain remains appropriate.
+
+Source provenance
+-----------------
+Post-fix source commit:
+
+    84b731a85732d10dbb30f5374b2e11c3715d86e4
+
+The tracked worktree must be clean when scientific collection starts.
+
+The pre-fix drain results remain preserved as historical evidence.
+Post-fix observations must be collected separately and must not be
+combined with pre-fix observations as if they came from the same
+simulator semantics.
+
+Simulation conditions
+---------------------
+Active traffic duration:
+
+    10000 ms
+
+Drain durations tested:
+
+    500 ms
+    1000 ms
+    2000 ms
+
+Traffic scenarios:
+
+    BASELINE
+    CONGESTED
+    URLLC_HIGH
+    SIMULTANEOUS_HIGH
+
+Seeds:
+
+    7
+    17
+    27
+
+Total planned runs:
+
+    3 drain durations
+    x 4 traffic scenarios
+    x 3 seeds
+    = 36 runs
+
+Radio condition:
+
+    STATIC_GOOD
+
+Cell configuration:
+
+    10 MHz
+    FR1
+    FDD
+
+Per-UE bearer-buffer capacity:
+
+    81920 bytes
+
+The corrected admission invariant must remain active for all runs.
+
+Drain semantics
+---------------
+Traffic generation stops at the end of the fixed 10000-ms active
+period.
+
+During the drain period:
+
+    no new traffic is generated;
+    scheduling continues;
+    retransmission processing continues;
+    transport-block completion continues;
+    packet completion accounting continues.
+
+Active-period throughput remains based only on bytes delivered during
+the active period divided by the fixed active duration.
+
+Revalidation metrics
+--------------------
+Use the same drain-stability metrics and definitions as the frozen
+pre-fix drain-calibration methodology.
+
+For each scenario, seed, and slice, compare the relevant residual
+fraction and p99 delay quantities between drain durations.
+
+Residual absolute stability tolerance:
+
+    0.005
+
+p99 stability tolerance:
+
+    max(
+        0.1 ms,
+        0.02 * reference_p99
+    )
+
+No tolerance may be relaxed after observing post-fix results.
+
+Decision rule
+-------------
+The 1000-ms drain may be retained only if, for every tested traffic
+scenario, seed, and slice, the 1000-ms result is stable relative to
+the 2000-ms result under the frozen tolerances.
+
+The 500-ms result is included to test whether the corrected simulator
+has materially reduced the necessary drain duration.
+
+Case A:
+    500 ms is not stable relative to the larger tested drains,
+    while 1000 ms is stable relative to 2000 ms.
+
+Decision:
+    Retain 1000 ms.
+
+Case B:
+    500 ms is also stable relative to every larger tested drain.
+
+Decision:
+    Do not automatically select 500 ms and do not retain 1000 ms
+    merely because it was selected before the buffer correction.
+    Reopen the lower-drain search prospectively on the corrected
+    simulator to determine the smallest stable duration.
+
+Case C:
+    1000 ms is not stable relative to 2000 ms.
+
+Decision:
+    The previous 1000-ms selection is invalid under the corrected
+    simulator. Define and freeze a prospective expanded drain search
+    before collecting additional drain durations.
+
+Case D:
+    Any run violates packet-accounting conservation, produces an
+    invalid metric, or violates the corrected bearer-capacity
+    invariant.
+
+Decision:
+    Stop. Do not perform drain selection until the correctness issue
+    is resolved.
+
+Evidence requirements
+---------------------
+The post-fix collection must preserve:
+
+    source commit;
+    protocol SHA-256;
+    traffic scenario;
+    seed;
+    drain duration;
+    raw results;
+    per-run summaries;
+    analysis outputs;
+    file SHA-256 values;
+    complete run count;
+    final decision record.
+
+The post-fix collection must use a new output location and must not
+overwrite the pre-fix drain-calibration evidence.
+
+Interpretation
+--------------
+This is a targeted semantic-change revalidation, not a claim that the
+original drain experiment was incorrectly executed.
+
+The original drain experiment characterized the simulator semantics
+that existed at that time.
+
+The post-fix experiment determines whether its selected drain duration
+remains valid after enforcing the intended bearer-buffer capacity.
