@@ -78,6 +78,14 @@ class ExperimentConfig:
                 f"{self.model_variant}"
             )
 
+        if (
+            not isinstance(self.seed, int)
+            or isinstance(self.seed, bool)
+        ):
+            raise TypeError(
+                "seed must be a non-Boolean integer"
+            )
+
         if self.seed < 0:
             raise ValueError(
                 "seed must be non-negative"
