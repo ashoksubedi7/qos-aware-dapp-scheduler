@@ -61,6 +61,7 @@ class StudySeedPartitions:
 
             if any(
                 not isinstance(seed, int)
+                or isinstance(seed, bool)
                 for seed in seeds
             ):
                 raise TypeError(

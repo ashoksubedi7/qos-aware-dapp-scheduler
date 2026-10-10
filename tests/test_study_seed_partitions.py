@@ -89,6 +89,27 @@ def test_noninteger_seed_fails():
         )
 
 
+@pytest.mark.parametrize(
+    "seed",
+    (
+        True,
+        False,
+    ),
+)
+def test_boolean_seed_fails(
+    seed,
+):
+    with pytest.raises(
+        TypeError,
+        match="training_seeds must contain integer seeds",
+    ):
+        StudySeedPartitions(
+            training_seeds=(
+                seed,
+            )
+        )
+
+
 def test_non_tuple_namespace_fails():
     with pytest.raises(
         TypeError
