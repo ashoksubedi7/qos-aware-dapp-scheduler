@@ -255,3 +255,112 @@ def test_provenance_requires_frozen_protocol():
             config=_derived_config(),
             source_commit=SOURCE_COMMIT,
         )
+
+
+def test_run_manifest_writes_exact_provenance(
+    tmp_path,
+):
+    import json
+
+    import experiments.scientific_run_provenance as provenance_module
+
+    protocol = _protocol()
+    config = _derived_config()
+
+    manifest_path, provenance = (
+        provenance_module.write_scientific_run_manifest(
+            run_directory=tmp_path / "run",
+            protocol=protocol,
+            config=config,
+            source_commit=SOURCE_COMMIT,
+        )
+    )
+
+    assert manifest_path == (
+        tmp_path
+        / "run"
+        / "manifest.json"
+    )
+
+    assert manifest_path.is_file()
+
+    loaded = json.loads(
+        manifest_path.read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert loaded == provenance
+
+    assert (
+        provenance
+        == build_scientific_run_provenance(
+            protocol=protocol,
+            config=config,
+            source_commit=SOURCE_COMMIT,
+        )
+    )
+
+
+def test_run_manifest_is_deterministic(
+    tmp_path,
+):
+    import experiments.scientific_run_provenance as provenance_module
+
+    first_path, first_provenance = (
+        provenance_module.write_scientific_run_manifest(
+            run_directory=tmp_path / "first",
+            protocol=_protocol(),
+            config=_derived_config(),
+            source_commit=SOURCE_COMMIT,
+        )
+    )
+
+    second_path, second_provenance = (
+        provenance_module.write_scientific_run_manifest(
+            run_directory=tmp_path / "second",
+            protocol=_protocol(),
+            config=_derived_config(),
+            source_commit=SOURCE_COMMIT,
+        )
+    )
+
+    assert first_provenance == second_provenance
+
+    assert (
+        first_path.read_bytes()
+        == second_path.read_bytes()
+    )
+
+
+def test_run_manifest_refuses_overwrite(
+    tmp_path,
+):
+    import experiments.scientific_run_provenance as provenance_module
+
+    run_directory = tmp_path / "run"
+
+    provenance_module.write_scientific_run_manifest(
+        run_directory=run_directory,
+        protocol=_protocol(),
+        config=_derived_config(),
+        source_commit=SOURCE_COMMIT,
+    )
+
+    original = (
+        run_directory
+        / "manifest.json"
+    ).read_bytes()
+
+    with pytest.raises(FileExistsError):
+        provenance_module.write_scientific_run_manifest(
+            run_directory=run_directory,
+            protocol=_protocol(),
+            config=_derived_config(),
+            source_commit=SOURCE_COMMIT,
+        )
+
+    assert (
+        run_directory
+        / "manifest.json"
+    ).read_bytes() == original

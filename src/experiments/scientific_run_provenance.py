@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+from pathlib import Path
 from dataclasses import asdict
 
 from config.experiment_config import (
@@ -31,6 +32,21 @@ def _canonical_json_bytes(value):
         separators=(",", ":"),
         ensure_ascii=True,
     ).encode("utf-8")
+
+
+def _json_native(value):
+    """
+    Normalize provenance into JSON-native types.
+
+    This guarantees that the in-memory provenance object
+    is identical to the object recovered from its
+    persisted canonical JSON representation.
+    """
+    return json.loads(
+        _canonical_json_bytes(
+            value
+        ).decode("utf-8")
+    )
 
 
 def _sha256_json(value):
@@ -81,11 +97,15 @@ def build_scientific_run_provenance(
             "40-character lowercase Git SHA-1"
         )
 
-    training_protocol = asdict(
-        protocol
+    training_protocol = _json_native(
+        asdict(
+            protocol
+        )
     )
 
-    experiment_config = config.to_dict()
+    experiment_config = _json_native(
+        config.to_dict()
+    )
 
     training_protocol_sha256 = (
         _sha256_json(
@@ -135,3 +155,53 @@ def build_scientific_run_provenance(
             run_definition_sha256
         ),
     }
+
+
+
+def write_scientific_run_manifest(
+    run_directory,
+    protocol,
+    config,
+    source_commit,
+):
+    """
+    Persist the immutable provenance manifest for one
+    scientific training run.
+
+    Existing manifests are never overwritten.
+    """
+    provenance = build_scientific_run_provenance(
+        protocol=protocol,
+        config=config,
+        source_commit=source_commit,
+    )
+
+    manifest_bytes = (
+        _canonical_json_bytes(
+            provenance
+        )
+    )
+
+    run_directory = Path(
+        run_directory
+    )
+
+    manifest_path = (
+        run_directory
+        / "manifest.json"
+    )
+
+    run_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with manifest_path.open("xb") as handle:
+        handle.write(
+            manifest_bytes
+        )
+
+    return (
+        manifest_path,
+        provenance,
+    )
