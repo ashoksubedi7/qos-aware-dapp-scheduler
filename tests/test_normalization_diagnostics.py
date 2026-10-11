@@ -124,3 +124,107 @@ def test_to_dict_contains_clip_rate():
         result["backlog"]["clip_rate"]
         == 1.0
     )
+
+def test_backlog_diagnostics_are_separated_by_slice():
+    diagnostics = NormalizationDiagnostics()
+
+    diagnostics.record_backlog(
+        600,
+        500,
+        slice_name="eMBB",
+    )
+    diagnostics.record_backlog(
+        100,
+        500,
+        slice_name="URLLC",
+    )
+
+    assert (
+        diagnostics
+        .backlog_by_slice["eMBB"]
+        .observations
+        == 1
+    )
+    assert (
+        diagnostics
+        .backlog_by_slice["eMBB"]
+        .clip_rate
+        == 1.0
+    )
+    assert (
+        diagnostics
+        .backlog_by_slice["URLLC"]
+        .observations
+        == 1
+    )
+    assert (
+        diagnostics
+        .backlog_by_slice["URLLC"]
+        .clip_rate
+        == 0.0
+    )
+
+    # Preserve the existing aggregate diagnostic.
+    assert diagnostics.backlog.observations == 2
+    assert diagnostics.backlog.clip_rate == 0.5
+
+
+def test_sinr_diagnostics_are_separated_by_slice():
+    diagnostics = NormalizationDiagnostics()
+
+    diagnostics.record_sinr(
+        40,
+        0,
+        35,
+        slice_name="URLLC",
+    )
+    diagnostics.record_sinr(
+        18,
+        0,
+        35,
+        slice_name="eMBB",
+    )
+
+    assert (
+        diagnostics
+        .sinr_by_slice["URLLC"]
+        .clipped_high
+        == 1
+    )
+    assert (
+        diagnostics
+        .sinr_by_slice["eMBB"]
+        .clipped_total
+        == 0
+    )
+
+    # Preserve the existing aggregate diagnostic.
+    assert diagnostics.sinr.observations == 2
+
+
+def test_diagnostic_summary_contains_per_slice_clip_rates():
+    diagnostics = NormalizationDiagnostics()
+
+    diagnostics.record_backlog(
+        600,
+        500,
+        slice_name="eMBB",
+    )
+    diagnostics.record_backlog(
+        100,
+        500,
+        slice_name="URLLC",
+    )
+
+    result = diagnostics.to_dict()
+
+    assert (
+        result["backlog_by_slice"]
+        ["eMBB"]["clip_rate"]
+        == 1.0
+    )
+    assert (
+        result["backlog_by_slice"]
+        ["URLLC"]["clip_rate"]
+        == 0.0
+    )

@@ -299,12 +299,14 @@ class AssuredScheduler(InterSliceScheduler):
             self.normalization_diagnostics.record_backlog(
                 backlog,
                 backlog_caps[name],
+                slice_name=name,
             )
 
             self.normalization_diagnostics.record_sinr(
                 sinr,
                 self.config.sinr_min_db,
                 self.config.sinr_max_db,
+                slice_name=name,
             )
 
         urllc_hol = slice_max_hol_delay(

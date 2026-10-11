@@ -50,12 +50,47 @@ class NormalizationDiagnostics:
         self.sinr = FeatureClipStats()
         self.urgency = FeatureClipStats()
 
+        self.backlog_by_slice = {
+            name: FeatureClipStats()
+            for name in (
+                "eMBB",
+                "URLLC",
+                "mMTC",
+            )
+        }
+        self.sinr_by_slice = {
+            name: FeatureClipStats()
+            for name in (
+                "eMBB",
+                "URLLC",
+                "mMTC",
+            )
+        }
+
     def record_backlog(
         self,
         value,
         cap,
+        slice_name=None,
     ):
         self.backlog.record(
+            raw_value=float(value),
+            lower_bound=0.0,
+            upper_bound=float(cap),
+        )
+
+        if slice_name is None:
+            return
+
+        if slice_name not in self.backlog_by_slice:
+            raise ValueError(
+                "Unknown slice for backlog diagnostics: "
+                f"{slice_name}"
+            )
+
+        self.backlog_by_slice[
+            slice_name
+        ].record(
             raw_value=float(value),
             lower_bound=0.0,
             upper_bound=float(cap),
@@ -66,8 +101,26 @@ class NormalizationDiagnostics:
         value,
         minimum,
         maximum,
+        slice_name=None,
     ):
         self.sinr.record(
+            raw_value=float(value),
+            lower_bound=float(minimum),
+            upper_bound=float(maximum),
+        )
+
+        if slice_name is None:
+            return
+
+        if slice_name not in self.sinr_by_slice:
+            raise ValueError(
+                "Unknown slice for SINR diagnostics: "
+                f"{slice_name}"
+            )
+
+        self.sinr_by_slice[
+            slice_name
+        ].record(
             raw_value=float(value),
             lower_bound=float(minimum),
             upper_bound=float(maximum),
@@ -84,26 +137,29 @@ class NormalizationDiagnostics:
         )
 
     def to_dict(self):
+        def serialize(stats):
+            return asdict(stats) | {
+                "clipped_total":
+                    stats.clipped_total,
+                "clip_rate":
+                    stats.clip_rate,
+            }
+
         return {
-            "backlog": asdict(self.backlog)
-            | {
-                "clipped_total":
-                    self.backlog.clipped_total,
-                "clip_rate":
-                    self.backlog.clip_rate,
+            "backlog":
+                serialize(self.backlog),
+            "backlog_by_slice": {
+                name: serialize(stats)
+                for name, stats
+                in self.backlog_by_slice.items()
             },
-            "sinr": asdict(self.sinr)
-            | {
-                "clipped_total":
-                    self.sinr.clipped_total,
-                "clip_rate":
-                    self.sinr.clip_rate,
+            "sinr":
+                serialize(self.sinr),
+            "sinr_by_slice": {
+                name: serialize(stats)
+                for name, stats
+                in self.sinr_by_slice.items()
             },
-            "urgency": asdict(self.urgency)
-            | {
-                "clipped_total":
-                    self.urgency.clipped_total,
-                "clip_rate":
-                    self.urgency.clip_rate,
-            },
+            "urgency":
+                serialize(self.urgency),
         }

@@ -286,12 +286,18 @@ class _DiagnosticsRecorder:
         self.backlog_calls = []
         self.sinr_calls = []
         self.urgency_calls = []
+        self.backlog_slice_names = []
+        self.sinr_slice_names = []
 
     def record_backlog(
         self,
         backlog,
         cap,
+        slice_name=None,
     ):
+        self.backlog_slice_names.append(
+            slice_name
+        )
         self.backlog_calls.append(
             (
                 float(backlog),
@@ -304,7 +310,11 @@ class _DiagnosticsRecorder:
         sinr,
         minimum,
         maximum,
+        slice_name=None,
     ):
+        self.sinr_slice_names.append(
+            slice_name
+        )
         self.sinr_calls.append(
             (
                 float(sinr),
@@ -354,6 +364,28 @@ def test_normalization_diagnostics_use_same_byte_contract():
 
     scheduler.record_normalization_diagnostics(
         now=10.0
+    )
+
+    assert (
+        scheduler
+        .normalization_diagnostics
+        .backlog_slice_names
+        == [
+            "eMBB",
+            "URLLC",
+            "mMTC",
+        ]
+    )
+
+    assert (
+        scheduler
+        .normalization_diagnostics
+        .sinr_slice_names
+        == [
+            "eMBB",
+            "URLLC",
+            "mMTC",
+        ]
     )
 
     assert (
