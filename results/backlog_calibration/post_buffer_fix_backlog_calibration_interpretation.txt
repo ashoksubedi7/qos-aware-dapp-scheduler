@@ -1,0 +1,27 @@
+AssuredQoS post-buffer-fix backlog calibration interpretation
+
+Executed protocol SHA-256:
+6dcd4d2d7b2e91d549253e95c087c1165a84989440075af95512a1546cdddc50
+
+Calibration source commit:
+8679ce868d6ca3dcb4a773d0d837e113ed0d5f81
+
+Selected empirical normalization caps:
+eMBB: 818176 bytes
+URLLC: 1884160 bytes
+mMTC: 6244352 bytes
+
+Interpretation clarification:
+
+The protocol's "validation criterion" is a same-data calibration
+conformance check on the same runs used to select the caps. It is
+not independent held-out validation.
+
+References in the executed protocol to a "physical calibration
+cap" are interpreted as a frozen empirical calibration cap for
+normalization under this simulator and protocol. They are not
+physical, network-wide, or standards-defined upper bounds.
+
+The executed calibration protocol is preserved unchanged so that
+its recorded SHA-256 continues to identify the exact protocol
+used for the calibration runs.
