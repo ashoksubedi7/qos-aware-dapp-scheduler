@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import simpy
@@ -13,6 +14,9 @@ from experiments.scientific_run_provenance import (
 )
 from experiments.scientific_training_setup import (
     build_scientific_training_setup,
+)
+from experiments.checkpoint_schedule import (
+    candidate_checkpoint_steps,
 )
 from experiments.training_update_controller import (
     TrainingUpdateController,
@@ -78,6 +82,15 @@ def _close_scheduler_files(
         if slice_obj.label != "LTE":
             slice_obj.schedulerUL.dbFile.close()
 
+    inter_slice_log = getattr(
+        inter_slice,
+        "dbFile",
+        None,
+    )
+
+    if inter_slice_log is not None:
+        inter_slice_log.close()
+
 
 def _create_slice(
     inter_slice,
@@ -130,7 +143,7 @@ def run_scientific_training(
 
     run_directory = Path(
         run_directory
-    )
+    ).resolve()
 
     _, provenance = (
         write_scientific_run_manifest(
@@ -179,100 +192,182 @@ def run_scientific_training(
         ]
     )
 
-    env = simpy.Environment()
-
-    cell = Cell(
-        "c1",
-        [10],
-        "FR1",
-        False,
-        81920,
-        False,
-        derived_config.control_interval_ms,
-        scheduler_name,
-        experiment_config=derived_config,
+    runtime_directory = (
+        run_directory
+        / "runtime"
     )
 
-    inter_slice = (
-        cell.interSliceSched
+    runtime_directory.mkdir(
+        exist_ok=False
     )
 
-    inter_slice.set_successful_update_callback(
-        controller
+    caller_directory = Path.cwd()
+
+    os.chdir(
+        runtime_directory
     )
-
-    traffic = get_traffic_scenario(
-        derived_config.traffic_scenario
-    )
-
-    t_sim = (
-        horizon.total_duration_ms
-    )
-
-    meas_interval = 50.0
-
-    groups = [
-        _make_group(
-            traffic.embb,
-            "eMBB",
-            20,
-            None,
-            cell,
-            t_sim,
-            meas_interval,
-            env,
-            derived_config,
-        ),
-        _make_group(
-            traffic.urllc,
-            "URLLC",
-            5,
-            derived_config
-            .urllc_scheduling_deadline_ms,
-            cell,
-            t_sim,
-            meas_interval,
-            env,
-            derived_config,
-        ),
-        _make_group(
-            traffic.mmtc,
-            "mMTC",
-            20,
-            None,
-            cell,
-            t_sim,
-            meas_interval,
-            env,
-            derived_config,
-        ),
-    ]
-
-    for group in groups:
-        _create_slice(
-            inter_slice,
-            group,
-        )
-
-    env.process(
-        inter_slice.resAlloc(
-            env
-        )
-    )
-
-    for group in groups:
-        group.activateSliceScheds(
-            inter_slice,
-            env,
-        )
 
     try:
-        env.run(
-            until=t_sim
+        env = simpy.Environment()
+
+        cell = Cell(
+            "c1",
+            [10],
+            "FR1",
+            False,
+            81920,
+            False,
+            derived_config.control_interval_ms,
+            scheduler_name,
+            experiment_config=derived_config,
         )
+
+        inter_slice = (
+            cell.interSliceSched
+        )
+
+        inter_slice.set_successful_update_callback(
+            controller
+        )
+
+        traffic = get_traffic_scenario(
+            derived_config.traffic_scenario
+        )
+
+        t_sim = (
+            horizon.total_duration_ms
+        )
+
+        meas_interval = 50.0
+
+        groups = [
+            _make_group(
+                traffic.embb,
+                "eMBB",
+                20,
+                None,
+                cell,
+                t_sim,
+                meas_interval,
+                env,
+                derived_config,
+            ),
+            _make_group(
+                traffic.urllc,
+                "URLLC",
+                5,
+                derived_config
+                .urllc_scheduling_deadline_ms,
+                cell,
+                t_sim,
+                meas_interval,
+                env,
+                derived_config,
+            ),
+            _make_group(
+                traffic.mmtc,
+                "mMTC",
+                20,
+                None,
+                cell,
+                t_sim,
+                meas_interval,
+                env,
+                derived_config,
+            ),
+        ]
+
+        for group in groups:
+            _create_slice(
+                inter_slice,
+                group,
+            )
+
+        env.process(
+            inter_slice.resAlloc(
+                env
+            )
+        )
+
+        for group in groups:
+            group.activateSliceScheds(
+                inter_slice,
+                env,
+            )
+
+        try:
+            env.run(
+                until=t_sim
+            )
+        finally:
+            _close_scheduler_files(
+                inter_slice
+            )
     finally:
-        _close_scheduler_files(
-            inter_slice
+        os.chdir(
+            caller_directory
+        )
+
+    budget = (
+        protocol
+        .successful_gradient_update_budget
+    )
+
+    actual_training_steps = (
+        inter_slice
+        .agent
+        .training_steps
+    )
+
+    if actual_training_steps != budget:
+        raise RuntimeError(
+            "scientific training did not reach "
+            "the frozen successful-update budget; "
+            f"expected {budget}, found "
+            f"{actual_training_steps}"
+        )
+
+    expected_update_sequence = tuple(
+        range(
+            1,
+            budget + 1,
+        )
+    )
+
+    if (
+        controller.observed_steps
+        != expected_update_sequence
+    ):
+        raise RuntimeError(
+            "scientific training successful update "
+            "sequence is incomplete or malformed; "
+            f"expected {expected_update_sequence}, "
+            f"found {controller.observed_steps}"
+        )
+
+    expected_checkpoint_steps = tuple(
+        candidate_checkpoint_steps(
+            budget,
+            protocol.checkpoint_interval_updates,
+        )
+    )
+
+    if (
+        controller.saved_checkpoint_steps
+        != expected_checkpoint_steps
+    ):
+        raise RuntimeError(
+            "scientific training checkpoint "
+            "schedule is incomplete or malformed; "
+            f"expected {expected_checkpoint_steps}, "
+            f"found "
+            f"{controller.saved_checkpoint_steps}"
+        )
+
+    if inter_slice.learning_enabled:
+        raise RuntimeError(
+            "scientific training ended with "
+            "learning still enabled"
         )
 
     return build_run_summary(

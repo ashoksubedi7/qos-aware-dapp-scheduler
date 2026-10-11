@@ -570,3 +570,103 @@ def test_launch_reads_head_before_loading_training_runtime(
             / "run"
         ),
     )
+
+
+def test_scientific_worktree_check_rejects_untracked_file(
+    tmp_path,
+):
+    repo = (
+        tmp_path
+        / "repo"
+    )
+
+    repo.mkdir()
+
+    subprocess.run(
+        [
+            "git",
+            "init",
+        ],
+        cwd=repo,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    subprocess.run(
+        [
+            "git",
+            "config",
+            "user.email",
+            "test@example.com",
+        ],
+        cwd=repo,
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "git",
+            "config",
+            "user.name",
+            "Test",
+        ],
+        cwd=repo,
+        check=True,
+    )
+
+    tracked = (
+        repo
+        / "tracked.txt"
+    )
+
+    tracked.write_text(
+        "committed\n",
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [
+            "git",
+            "add",
+            "tracked.txt",
+        ],
+        cwd=repo,
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "-m",
+            "initial",
+        ],
+        cwd=repo,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # A fully committed repository is accepted.
+    launcher_module._require_clean_tracked_worktree(
+        repo
+    )
+
+    # An untracked Python source file could affect
+    # execution without being represented by HEAD.
+    (
+        repo
+        / "untracked_source.py"
+    ).write_text(
+        "VALUE = 'not represented by git HEAD'\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="untracked",
+    ):
+        launcher_module._require_clean_tracked_worktree(
+            repo
+        )

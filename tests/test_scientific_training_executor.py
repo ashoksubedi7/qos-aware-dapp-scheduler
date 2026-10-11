@@ -645,3 +645,578 @@ def test_executor_closes_scheduler_files_on_simulation_failure(
     ]
 
     assert state["summary_calls"] == []
+
+
+def test_executor_rejects_run_that_does_not_reach_update_budget(
+    monkeypatch,
+    tmp_path,
+):
+    state = _install_probe_runtime(
+        monkeypatch,
+        tmp_path,
+    )
+
+    def incomplete_run(
+        until,
+    ):
+        state[
+            "environment"
+        ].run_calls.append(
+            float(until)
+        )
+
+        scheduler = state[
+            "scheduler"
+        ]
+
+        controller = state[
+            "controller"
+        ]
+
+        scheduler.agent.training_steps = 4
+        scheduler.learning_enabled = False
+
+        controller._observed_steps = [
+            1,
+            2,
+            3,
+            4,
+        ]
+
+        controller._saved_checkpoint_steps = [
+            2,
+            4,
+        ]
+
+    state[
+        "environment"
+    ].run = incomplete_run
+
+    with pytest.raises(
+        RuntimeError,
+        match="budget",
+    ):
+        executor_module.run_scientific_training(
+            protocol=state["protocol"],
+            config=_config(),
+            run_directory=(
+                tmp_path
+                / "run"
+            ),
+            source_commit=SOURCE_COMMIT,
+        )
+
+    assert state["summary_calls"] == []
+
+
+def test_executor_rejects_incomplete_successful_update_sequence(
+    monkeypatch,
+    tmp_path,
+):
+    state = _install_probe_runtime(
+        monkeypatch,
+        tmp_path,
+    )
+
+    def malformed_run(
+        until,
+    ):
+        state[
+            "environment"
+        ].run_calls.append(
+            float(until)
+        )
+
+        scheduler = state[
+            "scheduler"
+        ]
+
+        controller = state[
+            "controller"
+        ]
+
+        scheduler.agent.training_steps = 5
+        scheduler.learning_enabled = False
+
+        controller._observed_steps = [
+            1,
+            2,
+            3,
+            5,
+        ]
+
+        controller._saved_checkpoint_steps = [
+            2,
+            4,
+            5,
+        ]
+
+    state[
+        "environment"
+    ].run = malformed_run
+
+    with pytest.raises(
+        RuntimeError,
+        match="successful update",
+    ):
+        executor_module.run_scientific_training(
+            protocol=state["protocol"],
+            config=_config(),
+            run_directory=(
+                tmp_path
+                / "run"
+            ),
+            source_commit=SOURCE_COMMIT,
+        )
+
+    assert state["summary_calls"] == []
+
+
+def test_executor_rejects_incomplete_checkpoint_schedule(
+    monkeypatch,
+    tmp_path,
+):
+    state = _install_probe_runtime(
+        monkeypatch,
+        tmp_path,
+    )
+
+    def incomplete_checkpoints(
+        until,
+    ):
+        state[
+            "environment"
+        ].run_calls.append(
+            float(until)
+        )
+
+        scheduler = state[
+            "scheduler"
+        ]
+
+        controller = state[
+            "controller"
+        ]
+
+        scheduler.agent.training_steps = 5
+        scheduler.learning_enabled = False
+
+        controller._observed_steps = [
+            1,
+            2,
+            3,
+            4,
+            5,
+        ]
+
+        controller._saved_checkpoint_steps = [
+            2,
+            4,
+        ]
+
+    state[
+        "environment"
+    ].run = incomplete_checkpoints
+
+    with pytest.raises(
+        RuntimeError,
+        match="checkpoint",
+    ):
+        executor_module.run_scientific_training(
+            protocol=state["protocol"],
+            config=_config(),
+            run_directory=(
+                tmp_path
+                / "run"
+            ),
+            source_commit=SOURCE_COMMIT,
+        )
+
+    assert state["summary_calls"] == []
+
+
+def test_executor_rejects_run_if_learning_remains_enabled(
+    monkeypatch,
+    tmp_path,
+):
+    state = _install_probe_runtime(
+        monkeypatch,
+        tmp_path,
+    )
+
+    def unfrozen_run(
+        until,
+    ):
+        state[
+            "environment"
+        ].run_calls.append(
+            float(until)
+        )
+
+        scheduler = state[
+            "scheduler"
+        ]
+
+        controller = state[
+            "controller"
+        ]
+
+        scheduler.agent.training_steps = 5
+        scheduler.learning_enabled = True
+
+        controller._observed_steps = [
+            1,
+            2,
+            3,
+            4,
+            5,
+        ]
+
+        controller._saved_checkpoint_steps = [
+            2,
+            4,
+            5,
+        ]
+
+    state[
+        "environment"
+    ].run = unfrozen_run
+
+    with pytest.raises(
+        RuntimeError,
+        match="learning",
+    ):
+        executor_module.run_scientific_training(
+            protocol=state["protocol"],
+            config=_config(),
+            run_directory=(
+                tmp_path
+                / "run"
+            ),
+            source_commit=SOURCE_COMMIT,
+        )
+
+    assert state["summary_calls"] == []
+
+
+def test_executor_isolates_simulator_runtime_and_restores_cwd(
+    monkeypatch,
+    tmp_path,
+):
+    state = _install_probe_runtime(
+        monkeypatch,
+        tmp_path,
+    )
+
+    caller_directory = (
+        tmp_path
+        / "caller"
+    )
+    caller_directory.mkdir()
+
+    run_directory = (
+        tmp_path
+        / "run"
+    )
+
+    runtime_directory = (
+        run_directory
+        / "runtime"
+    )
+
+    observed = {}
+
+    original_cell = (
+        executor_module.Cell
+    )
+
+    def cell_factory(
+        *args,
+        **kwargs,
+    ):
+        observed["cell_cwd"] = (
+            Path.cwd()
+        )
+
+        return original_cell(
+            *args,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(
+        executor_module,
+        "Cell",
+        cell_factory,
+    )
+
+    original_run = (
+        state["environment"].run
+    )
+
+    def run(
+        until,
+    ):
+        observed["run_cwd"] = (
+            Path.cwd()
+        )
+
+        Path(
+            "Statistics"
+        ).mkdir(
+            exist_ok=True
+        )
+
+        Path(
+            "Logs"
+        ).mkdir(
+            exist_ok=True
+        )
+
+        Path(
+            "Statistics/probe.txt"
+        ).write_text(
+            "statistics\n",
+            encoding="utf-8",
+        )
+
+        Path(
+            "Logs/probe.txt"
+        ).write_text(
+            "logs\n",
+            encoding="utf-8",
+        )
+
+        return original_run(
+            until
+        )
+
+    state[
+        "environment"
+    ].run = run
+
+    monkeypatch.chdir(
+        caller_directory
+    )
+
+    result = (
+        executor_module
+        .run_scientific_training(
+            protocol=state["protocol"],
+            config=_config(),
+            run_directory=run_directory,
+            source_commit=SOURCE_COMMIT,
+        )
+    )
+
+    assert result is state["summary"]
+
+    assert (
+        observed["cell_cwd"]
+        == runtime_directory
+    )
+
+    assert (
+        observed["run_cwd"]
+        == runtime_directory
+    )
+
+    assert (
+        Path.cwd()
+        == caller_directory
+    )
+
+    assert (
+        runtime_directory
+        / "Statistics"
+        / "probe.txt"
+    ).read_text(
+        encoding="utf-8"
+    ) == "statistics\n"
+
+    assert (
+        runtime_directory
+        / "Logs"
+        / "probe.txt"
+    ).read_text(
+        encoding="utf-8"
+    ) == "logs\n"
+
+    assert not (
+        caller_directory
+        / "Statistics"
+    ).exists()
+
+    assert not (
+        caller_directory
+        / "Logs"
+    ).exists()
+
+
+def test_executor_restores_cwd_after_simulation_failure(
+    monkeypatch,
+    tmp_path,
+):
+    state = _install_probe_runtime(
+        monkeypatch,
+        tmp_path,
+        fail_run=True,
+    )
+
+    caller_directory = (
+        tmp_path
+        / "caller"
+    )
+    caller_directory.mkdir()
+
+    run_directory = (
+        tmp_path
+        / "run"
+    )
+
+    runtime_directory = (
+        run_directory
+        / "runtime"
+    )
+
+    observed = {}
+
+    original_run = (
+        state["environment"].run
+    )
+
+    def failing_run(
+        until,
+    ):
+        observed["run_cwd"] = (
+            Path.cwd()
+        )
+
+        Path(
+            "Statistics"
+        ).mkdir(
+            exist_ok=True
+        )
+
+        return original_run(
+            until
+        )
+
+    state[
+        "environment"
+    ].run = failing_run
+
+    monkeypatch.chdir(
+        caller_directory
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="simulation failure",
+    ):
+        executor_module.run_scientific_training(
+            protocol=state["protocol"],
+            config=_config(),
+            run_directory=run_directory,
+            source_commit=SOURCE_COMMIT,
+        )
+
+    assert (
+        observed["run_cwd"]
+        == runtime_directory
+    )
+
+    assert (
+        Path.cwd()
+        == caller_directory
+    )
+
+    assert (
+        runtime_directory
+        / "Statistics"
+    ).is_dir()
+
+    assert not (
+        caller_directory
+        / "Statistics"
+    ).exists()
+
+    assert state["summary_calls"] == []
+
+
+def test_executor_resolves_scientific_run_root_before_runtime_isolation(
+    monkeypatch,
+    tmp_path,
+):
+    state = _install_probe_runtime(
+        monkeypatch,
+        tmp_path,
+    )
+
+    caller_directory = (
+        tmp_path
+        / "caller"
+    )
+    caller_directory.mkdir()
+
+    monkeypatch.chdir(
+        caller_directory
+    )
+
+    relative_run_directory = Path(
+        "run"
+    )
+
+    executor_module.run_scientific_training(
+        protocol=state["protocol"],
+        config=_config(),
+        run_directory=relative_run_directory,
+        source_commit=SOURCE_COMMIT,
+    )
+
+    expected_run_directory = (
+        caller_directory
+        / "run"
+    ).resolve()
+
+    assert (
+        state[
+            "manifest_calls"
+        ][0]["run_directory"]
+        == expected_run_directory
+    )
+
+    assert (
+        state[
+            "controller"
+        ].checkpoint_root
+        ==
+        expected_run_directory
+        / "checkpoints"
+    )
+
+    assert (
+        Path.cwd()
+        == caller_directory
+    )
+
+
+def test_close_scheduler_files_closes_inter_slice_log():
+    class ProbeFile:
+        def __init__(self):
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    inter_slice_log = ProbeFile()
+
+    inter_slice = SimpleNamespace(
+        slices={},
+        dbFile=inter_slice_log,
+    )
+
+    executor_module._close_scheduler_files(
+        inter_slice
+    )
+
+    assert inter_slice_log.close_calls == 1

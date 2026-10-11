@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import subprocess
 
 
 def validate_scientific_process_environment(
@@ -77,9 +78,27 @@ def _require_clean_tracked_worktree(
         require_clean_tracked_worktree,
     )
 
-    return require_clean_tracked_worktree(
+    require_clean_tracked_worktree(
         repo_root
     )
+
+    untracked = subprocess.check_output(
+        [
+            "git",
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+        ],
+        cwd=repo_root,
+        text=True,
+    ).strip()
+
+    if untracked:
+        raise RuntimeError(
+            "untracked files are present; "
+            "refusing scientific training:\n"
+            f"{untracked}"
+        )
 
 
 def _git_head(
