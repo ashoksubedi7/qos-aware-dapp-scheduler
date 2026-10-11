@@ -729,6 +729,7 @@ class _TrainingProbeAgent:
         self.remember_calls = []
         self.train_step_calls = 0
         self.decay_epsilon_calls = 0
+        self.training_steps = 0
 
     def remember(
         self,
@@ -750,6 +751,10 @@ class _TrainingProbeAgent:
 
     def train_step(self):
         self.train_step_calls += 1
+
+        if self.training_loss is not None:
+            self.training_steps += 1
+
         return self.training_loss
 
     def decay_epsilon(self):
@@ -802,6 +807,7 @@ def test_training_transition_decays_after_successful_update():
         training_mode=True
     )
     scheduler.learning_enabled = True
+    scheduler.successful_update_callback = None
 
     scheduler.agent = _TrainingProbeAgent(
         training_loss=0.125
@@ -1286,3 +1292,146 @@ def test_deadline_scanner_does_not_reclassify_scheduled_packet():
     assert flow.deadlineEvaluated == 1
     assert flow.deadlineMisses == 0
     assert packet.deadline_missed is False
+
+
+def test_training_scheduler_starts_without_successful_update_callback():
+    scheduler = AssuredScheduler(
+        [10],
+        "FR1",
+        False,
+        False,
+        1.0,
+        config=ExperimentConfig(
+            training_mode=True,
+            seed=7,
+        ),
+    )
+
+    assert scheduler.successful_update_callback is None
+
+
+def test_successful_update_callback_runs_after_decay_and_can_freeze():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    scheduler.config = SimpleNamespace(
+        training_mode=True
+    )
+    scheduler.learning_enabled = True
+
+    scheduler.agent = _TrainingProbeAgent(
+        training_loss=0.125
+    )
+
+    observed = []
+
+    def callback(
+        owner,
+        training_step,
+        training_loss,
+    ):
+        observed.append(
+            (
+                owner is scheduler,
+                training_step,
+                training_loss,
+                owner.agent.decay_epsilon_calls,
+                owner.learning_enabled,
+            )
+        )
+
+        owner.freeze_learning()
+
+    scheduler.set_successful_update_callback(
+        callback
+    )
+
+    result = scheduler._train_transition(
+        state="state",
+        action=4,
+        reward=0.25,
+        next_state="next_state",
+    )
+
+    assert result == 0.125
+
+    assert observed == [
+        (
+            True,
+            1,
+            0.125,
+            1,
+            True,
+        )
+    ]
+
+    assert scheduler.learning_enabled is False
+
+    remembered_before = len(
+        scheduler.agent.remember_calls
+    )
+    train_calls_before = (
+        scheduler.agent.train_step_calls
+    )
+
+    second_result = scheduler._train_transition(
+        state="state_2",
+        action=5,
+        reward=0.5,
+        next_state="next_state_2",
+    )
+
+    assert second_result is None
+
+    assert (
+        len(scheduler.agent.remember_calls)
+        == remembered_before
+    )
+
+    assert (
+        scheduler.agent.train_step_calls
+        == train_calls_before
+    )
+
+
+def test_successful_update_callback_is_not_called_without_update():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    scheduler.config = SimpleNamespace(
+        training_mode=True
+    )
+    scheduler.learning_enabled = True
+
+    scheduler.agent = _TrainingProbeAgent(
+        training_loss=None
+    )
+
+    observed = []
+
+    scheduler.set_successful_update_callback(
+        lambda *args: observed.append(args)
+    )
+
+    result = scheduler._train_transition(
+        state="state",
+        action=3,
+        reward=0.5,
+        next_state="next_state",
+    )
+
+    assert result is None
+    assert observed == []
+
+
+def test_successful_update_callback_rejects_noncallable():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    with pytest.raises(TypeError):
+        scheduler.set_successful_update_callback(
+            "not-callable"
+        )

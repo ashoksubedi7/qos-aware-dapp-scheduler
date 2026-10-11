@@ -114,6 +114,11 @@ class AssuredScheduler(InterSliceScheduler):
             self.config.training_mode
         )
 
+        # Optional scientific-training hook. It is
+        # invoked only after a successful optimizer
+        # update and the corresponding epsilon decay.
+        self.successful_update_callback = None
+
         set_global_seed(
             self.config.seed
         )
@@ -692,6 +697,25 @@ class AssuredScheduler(InterSliceScheduler):
         """
         self.learning_enabled = False
 
+    def set_successful_update_callback(
+        self,
+        callback,
+    ):
+        """
+        Attach an optional observer for successful
+        optimizer-update boundaries.
+        """
+        if (
+            callback is not None
+            and not callable(callback)
+        ):
+            raise TypeError(
+                "successful update callback must be "
+                "callable or None"
+            )
+
+        self.successful_update_callback = callback
+
     def _train_transition(
         self,
         state,
@@ -727,6 +751,18 @@ class AssuredScheduler(InterSliceScheduler):
 
         if training_loss is not None:
             self.agent.decay_epsilon()
+
+            if (
+                self.successful_update_callback
+                is not None
+            ):
+                self.successful_update_callback(
+                    self,
+                    int(
+                        self.agent.training_steps
+                    ),
+                    float(training_loss),
+                )
 
         return training_loss
 
