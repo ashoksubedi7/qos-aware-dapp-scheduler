@@ -209,3 +209,107 @@ def test_input_order_does_not_change_selection():
 
     assert first == second
     assert first == b
+
+@pytest.mark.parametrize(
+    "update_budget",
+    (
+        True,
+        False,
+        10_000.0,
+        10_000.5,
+    ),
+)
+def test_noninteger_update_budget_fails(
+    update_budget,
+):
+    with pytest.raises(
+        TypeError,
+        match=(
+            "update budget must be a "
+            "non-Boolean integer"
+        ),
+    ):
+        candidate_checkpoint_steps(
+            update_budget=update_budget,
+            interval_updates=2_000,
+        )
+
+
+@pytest.mark.parametrize(
+    "interval_updates",
+    (
+        True,
+        False,
+        2_000.0,
+        2_000.5,
+    ),
+)
+def test_noninteger_checkpoint_interval_fails(
+    interval_updates,
+):
+    with pytest.raises(
+        TypeError,
+        match=(
+            "checkpoint interval must be a "
+            "non-Boolean integer"
+        ),
+    ):
+        candidate_checkpoint_steps(
+            update_budget=10_000,
+            interval_updates=interval_updates,
+        )
+
+
+@pytest.mark.parametrize(
+    "training_step",
+    (
+        True,
+        False,
+        1_000.0,
+        1_000.5,
+    ),
+)
+def test_noninteger_checkpoint_candidate_step_fails(
+    training_step,
+):
+    candidate = CheckpointCandidate(
+        training_step=training_step,
+        score=score(),
+    )
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "checkpoint training step must be a "
+            "non-Boolean integer"
+        ),
+    ):
+        select_best_checkpoint(
+            [candidate]
+        )
+
+@pytest.mark.parametrize(
+    "training_step",
+    (
+        True,
+        False,
+        1_000.0,
+        1_000.5,
+    ),
+)
+def test_selection_key_rejects_noninteger_training_step(
+    training_step,
+):
+    candidate = CheckpointCandidate(
+        training_step=training_step,
+        score=score(),
+    )
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "checkpoint training step must be a "
+            "non-Boolean integer"
+        ),
+    ):
+        candidate.selection_key()

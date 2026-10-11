@@ -31,10 +31,19 @@ class CheckpointCandidate:
         Training step is consulted only when every
         validation metric is exactly tied.
         """
+        if (
+            not isinstance(self.training_step, int)
+            or isinstance(self.training_step, bool)
+        ):
+            raise TypeError(
+                "checkpoint training step must be a "
+                "non-Boolean integer"
+            )
+
         return (
             self.score.lexicographic_key()
             +
-            (int(self.training_step),)
+            (self.training_step,)
         )
 
 
@@ -53,13 +62,23 @@ def candidate_checkpoint_steps(
     interval multiple.
     """
 
-    update_budget = int(
-        update_budget
-    )
+    if (
+        not isinstance(update_budget, int)
+        or isinstance(update_budget, bool)
+    ):
+        raise TypeError(
+            "update budget must be a "
+            "non-Boolean integer"
+        )
 
-    interval_updates = int(
-        interval_updates
-    )
+    if (
+        not isinstance(interval_updates, int)
+        or isinstance(interval_updates, bool)
+    ):
+        raise TypeError(
+            "checkpoint interval must be a "
+            "non-Boolean integer"
+        )
 
     if update_budget <= 0:
         raise ValueError(
@@ -119,9 +138,16 @@ def select_best_checkpoint(
                 "CheckpointCandidate instances"
             )
 
-        step = int(
-            candidate.training_step
-        )
+        step = candidate.training_step
+
+        if (
+            not isinstance(step, int)
+            or isinstance(step, bool)
+        ):
+            raise TypeError(
+                "checkpoint training step must be a "
+                "non-Boolean integer"
+            )
 
         if step <= 0:
             raise ValueError(
