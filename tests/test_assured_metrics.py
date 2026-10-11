@@ -233,21 +233,33 @@ def test_empty_queues_have_zero_hol():
     )
 
 
-def test_backlog_normalization():
+def test_backlog_normalization_requires_explicit_cap():
     assert np.isclose(
-        normalize_backlog(0),
+        normalize_backlog(
+            0,
+            cap=500,
+        ),
         0.0,
     )
     assert np.isclose(
-        normalize_backlog(250),
+        normalize_backlog(
+            250,
+            cap=500,
+        ),
         0.5,
     )
     assert np.isclose(
-        normalize_backlog(500),
+        normalize_backlog(
+            500,
+            cap=500,
+        ),
         1.0,
     )
     assert np.isclose(
-        normalize_backlog(900),
+        normalize_backlog(
+            900,
+            cap=500,
+        ),
         1.0,
     )
 
@@ -320,22 +332,20 @@ def test_invalid_deadline():
         )
 
 
-def test_m1_uses_configurable_backlog_cap():
+def test_m1_rejects_legacy_single_backlog_cap():
     slices = make_test_slices(
         embb_backlog=250,
         urllc_backlog=250,
         mmtc_backlog=250,
     )
 
-    state = build_m1_state(
-        slices,
-        backlog_cap=1000,
-    )
-
-    assert np.isclose(
-        state[0],
-        0.25,
-    )
+    with pytest.raises(
+        TypeError,
+    ):
+        build_m1_state(
+            slices,
+            backlog_cap=1000,
+        )
 
 
 def test_m1_uses_configurable_sinr_bounds():

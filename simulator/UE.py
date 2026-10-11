@@ -187,7 +187,11 @@ class UE:
                 if self.id == ue:
                     buffSizeThisUE = buffSizeUE
                 buffSizeAllUEs = buffSizeAllUEs + buffSizeUE
-        if buffSizeThisUE < cell.maxBuffUE:
+        if (
+            buffSizeThisUE
+            + pD.size
+            <= cell.maxBuffUE
+        ):
             self.bearers[0].buffer.insertPckt(pD)
         else:
             pcktN = pD.secNum

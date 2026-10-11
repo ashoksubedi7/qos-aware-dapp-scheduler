@@ -646,3 +646,164 @@ def test_queue_data_packet_multiple_overflows_preserve_drop_count():
         101,
         102,
     }
+
+
+def _make_bearer_admission_fixture(
+    current_bytes,
+    incoming_bytes,
+    max_buffer_bytes=100,
+):
+    flow = make_flow()
+
+    flow.sliceName = "URLLC"
+    flow.type = "DL"
+
+    incoming = Packet(
+        2001,
+        incoming_bytes,
+        0,
+        "ue1",
+    )
+
+    incoming.tIn = 1.0
+
+    flow.generatedPacketIds.add(
+        incoming.secNum
+    )
+
+    flow.packetGenerationTimes[
+        incoming.secNum
+    ] = incoming.tIn
+
+    flow.appBuff.insertPckt(
+        incoming
+    )
+
+    bearer_buffer = PcktQueue()
+
+    if current_bytes > 0:
+        existing = Packet(
+            1999,
+            current_bytes,
+            0,
+            "ue1",
+        )
+
+        bearer_buffer.insertPckt(
+            existing
+        )
+
+    fake_ue = SimpleNamespace(
+        id="ue1",
+        packetFlows=[
+            flow
+        ],
+        bearers=[
+            SimpleNamespace(
+                buffer=bearer_buffer
+            )
+        ],
+    )
+
+    fake_scheduler = SimpleNamespace(
+        ues={
+            "ue1": fake_ue
+        },
+        printDebDataDM=(
+            lambda *args, **kwargs: None
+        ),
+    )
+
+    fake_slice = SimpleNamespace(
+        schedulerDL=fake_scheduler
+    )
+
+    fake_cell = SimpleNamespace(
+        maxBuffUE=max_buffer_bytes,
+        interSliceSched=SimpleNamespace(
+            slices={
+                "URLLC": fake_slice
+            }
+        ),
+    )
+
+    return (
+        flow,
+        fake_ue,
+        fake_cell,
+        incoming,
+        bearer_buffer,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "current_bytes",
+        "incoming_bytes",
+        "should_admit",
+    ),
+    [
+        # Strictly below capacity.
+        (59, 40, True),
+
+        # Exactly fills capacity.
+        (60, 40, True),
+
+        # Would exceed capacity by one byte.
+        (60, 41, False),
+
+        # Oversized packet into an empty bearer.
+        (0, 101, False),
+    ],
+)
+def test_bearer_admission_enforces_byte_capacity(
+    current_bytes,
+    incoming_bytes,
+    should_admit,
+):
+    (
+        flow,
+        fake_ue,
+        fake_cell,
+        incoming,
+        bearer_buffer,
+    ) = _make_bearer_admission_fixture(
+        current_bytes=current_bytes,
+        incoming_bytes=incoming_bytes,
+        max_buffer_bytes=100,
+    )
+
+    UE.queueDataPckt(
+        fake_ue,
+        fake_cell,
+    )
+
+    final_bytes = sum(
+        packet.size
+        for packet in bearer_buffer.pckts
+    )
+
+    if should_admit:
+        assert final_bytes == (
+            current_bytes
+            + incoming_bytes
+        )
+
+        assert final_bytes <= 100
+
+        assert (
+            incoming.secNum
+            not in flow.droppedPacketIds
+        )
+
+        assert flow.lostPackets == 0
+
+    else:
+        assert final_bytes == current_bytes
+
+        assert (
+            incoming.secNum
+            in flow.droppedPacketIds
+        )
+
+        assert flow.lostPackets == 1

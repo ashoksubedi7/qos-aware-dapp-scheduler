@@ -76,3 +76,12 @@ def test_evaluation_requires_checkpoint():
         ExperimentConfig(
             training_mode=False,
         )
+
+def test_invalid_traffic_scenario_rejected():
+    with pytest.raises(
+        ValueError,
+        match="unknown traffic scenario",
+    ):
+        ExperimentConfig(
+            traffic_scenario="NOT_A_SCENARIO",
+        )

@@ -1,19 +1,16 @@
 import numpy as np
 
-
-BACKLOG_CAP = 500.0
+from config.experiment_config import (
+    EMBB_BACKLOG_CAP_BYTES,
+    MMTC_BACKLOG_CAP_BYTES,
+    URLLC_BACKLOG_CAP_BYTES,
+)
 
 # The current AssuredQoS experiments use FDD.
 # The simulator's FDD MCS table has meaningful thresholds up to 35 dB.
 SINR_MIN_DB = 0.0
 SINR_MAX_DB = 35.0
 
-
-def slice_backlog(slice_obj):
-    """Return total DL packet backlog for a slice."""
-    return float(
-        slice_obj.schedulerDL.updSumPcks()
-    )
 
 def slice_backlog_bytes(slice_obj):
     """
@@ -143,7 +140,7 @@ def slice_max_hol_delay(
 
 def normalize_backlog(
     backlog,
-    cap=BACKLOG_CAP,
+    cap,
 ):
     if cap <= 0:
         raise ValueError(
@@ -207,23 +204,31 @@ def normalize_urllc_urgency(
     )    
 def build_m1_state(
     slices,
-    backlog_cap=BACKLOG_CAP,
+    embb_backlog_cap_bytes=EMBB_BACKLOG_CAP_BYTES,
+    urllc_backlog_cap_bytes=URLLC_BACKLOG_CAP_BYTES,
+    mmtc_backlog_cap_bytes=MMTC_BACKLOG_CAP_BYTES,
     sinr_min_db=SINR_MIN_DB,
     sinr_max_db=SINR_MAX_DB,
 ):
     return np.array(
         [
             normalize_backlog(
-                slice_backlog(slices["eMBB"]),
-                backlog_cap,
+                slice_backlog_bytes(
+                    slices["eMBB"]
+                ),
+                embb_backlog_cap_bytes,
             ),
             normalize_backlog(
-                slice_backlog(slices["URLLC"]),
-                backlog_cap,
+                slice_backlog_bytes(
+                    slices["URLLC"]
+                ),
+                urllc_backlog_cap_bytes,
             ),
             normalize_backlog(
-                slice_backlog(slices["mMTC"]),
-                backlog_cap,
+                slice_backlog_bytes(
+                    slices["mMTC"]
+                ),
+                mmtc_backlog_cap_bytes,
             ),
             normalize_sinr(
                 slice_mean_sinr(slices["eMBB"]),
@@ -249,13 +254,23 @@ def build_m2_state(
     slices,
     now,
     urllc_deadline,
-    backlog_cap=BACKLOG_CAP,
+    embb_backlog_cap_bytes=EMBB_BACKLOG_CAP_BYTES,
+    urllc_backlog_cap_bytes=URLLC_BACKLOG_CAP_BYTES,
+    mmtc_backlog_cap_bytes=MMTC_BACKLOG_CAP_BYTES,
     sinr_min_db=SINR_MIN_DB,
     sinr_max_db=SINR_MAX_DB,
 ):
     m1_state = build_m1_state(
         slices,
-        backlog_cap=backlog_cap,
+        embb_backlog_cap_bytes=(
+            embb_backlog_cap_bytes
+        ),
+        urllc_backlog_cap_bytes=(
+            urllc_backlog_cap_bytes
+        ),
+        mmtc_backlog_cap_bytes=(
+            mmtc_backlog_cap_bytes
+        ),
         sinr_min_db=sinr_min_db,
         sinr_max_db=sinr_max_db,
     )

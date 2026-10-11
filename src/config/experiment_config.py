@@ -5,6 +5,8 @@ from config.dqn_hyperparameters import (
 )
 
 
+from environment.traffic_scenarios import get_traffic_scenario
+
 VALID_MODEL_VARIANTS = (
     "M1",
     "M2",
@@ -21,6 +23,17 @@ VALID_RADIO_SCENARIOS = (
 )
 
 
+# Frozen post-buffer-fix empirical backlog normalization
+# caps. Units: scheduler-visible DL bearer bytes per slice.
+#
+# These values were selected from the frozen backlog
+# calibration protocol and independently reconstructed from
+# the raw calibration evidence.
+EMBB_BACKLOG_CAP_BYTES = 818_176
+URLLC_BACKLOG_CAP_BYTES = 1_884_160
+MMTC_BACKLOG_CAP_BYTES = 6_244_352
+
+
 @dataclass(frozen=True)
 class ExperimentConfig:
     model_variant: str = "M1"
@@ -30,16 +43,28 @@ class ExperimentConfig:
     control_interval_ms: float = 1.0
     radio_update_interval_ms: float = 10.0
     # Duration after traffic generation stops during which
-	# scheduling, radio evolution, retransmissions, and packet
-	# completion continue.
-	#
-	# Keep zero until the drain duration is calibrated and frozen
-	# for the primary experiments.
-    drain_duration_ms: float = 0.0
+    # scheduling, radio evolution, retransmissions, and packet
+    # completion continue.
+    #
+    # Frozen primary value from the post-buffer-fix drain
+    # calibration. Explicit zero remains valid for protocols that
+    # intentionally disable post-traffic draining.
+    drain_duration_ms: float = 1000.0
 
     urllc_scheduling_deadline_ms: float = 1.0
 
-    backlog_cap: int = 500
+    # Frozen post-buffer-fix backlog normalization caps.
+    # Units: scheduler-visible DL bearer bytes per slice.
+    embb_backlog_cap_bytes: int = (
+        EMBB_BACKLOG_CAP_BYTES
+    )
+    urllc_backlog_cap_bytes: int = (
+        URLLC_BACKLOG_CAP_BYTES
+    )
+    mmtc_backlog_cap_bytes: int = (
+        MMTC_BACKLOG_CAP_BYTES
+    )
+
     sinr_min_db: float = 0.0
     sinr_max_db: float = 35.0
 
@@ -115,11 +140,42 @@ class ExperimentConfig:
                 "must be greater than zero"
             )
 
-        if self.backlog_cap <= 0:
-            raise ValueError(
-                "backlog_cap must be greater "
-                "than zero"
-            )
+        backlog_caps = (
+            (
+                "embb_backlog_cap_bytes",
+                self.embb_backlog_cap_bytes,
+            ),
+            (
+                "urllc_backlog_cap_bytes",
+                self.urllc_backlog_cap_bytes,
+            ),
+            (
+                "mmtc_backlog_cap_bytes",
+                self.mmtc_backlog_cap_bytes,
+            ),
+        )
+
+        for name, value in backlog_caps:
+            if (
+                not isinstance(
+                    value,
+                    int,
+                )
+                or isinstance(
+                    value,
+                    bool,
+                )
+            ):
+                raise TypeError(
+                    f"{name} must be a "
+                    "non-Boolean integer"
+                )
+
+            if value <= 0:
+                raise ValueError(
+                    f"{name} must be greater "
+                    "than zero"
+                )
 
         if (
             self.sinr_max_db
@@ -138,6 +194,10 @@ class ExperimentConfig:
                 "starvation_threshold_ms must "
                 "be greater than zero"
             )
+
+        get_traffic_scenario(
+            self.traffic_scenario
+        )
 
         if (
             self.radio_scenario

@@ -1,0 +1,207 @@
+AssuredQoS Post-Buffer-Fix Backlog Normalization Calibration Protocol
+=====================================================================
+
+Purpose
+-------
+Re-establish fixed normalization caps for the three raw backlog-byte
+features used by AssuredQoS M1/M2/M3 after correcting the per-UE
+bearer-buffer admission rule.
+
+The historical backlog calibration was collected at:
+
+    8f205487a5aa7803496fd93b06d39ecca81c5733
+
+The corrected bearer-buffer semantics begin at:
+
+    84b731a85732d10dbb30f5374b2e11c3715d86e4
+
+The historical collection therefore predates the semantic correction
+and is preserved only as historical evidence. Its selected caps must
+not be reused as the normalization caps for the corrected simulator.
+
+Corrected admission invariant
+-----------------------------
+For every admitted packet:
+
+    current_bearer_bytes + incoming_packet_bytes <= 81920
+
+The corrected invariant must remain active throughout every
+post-fix calibration run.
+
+Raw feature definition
+----------------------
+For each slice s at time t:
+
+    B_s(t) = sum of packet.size over packets currently present in
+             the first DL bearer queue of all UEs belonging to slice s.
+
+Units: bytes.
+
+Included:
+- scheduler-visible bytes currently waiting in DL bearer queues
+- residual packet fragments returned to bearer queues
+
+Excluded:
+- application-buffer bytes
+- already committed/in-flight transport-block bytes
+- pending retransmission TB bytes
+- UE auxiliary-buffer data
+
+Calibration traffic scenarios
+-----------------------------
+BASELINE
+CONGESTED
+URLLC_HIGH
+SIMULTANEOUS_HIGH
+
+Seeds
+-----
+7
+17
+27
+
+Simulation conditions
+---------------------
+Active duration: 10000 ms
+Backlog sampling interval: 1 ms
+Samples used for calibration: active period only
+Drain samples: excluded
+Radio scenario: STATIC_GOOD
+Bandwidth: 10 MHz
+Frequency range: FR1
+Duplex: FDD
+Per-UE bearer-buffer limit: 81920 bytes
+Scheduler: deterministic base InterSliceScheduler
+
+The separately validated primary experiment drain duration is 1000 ms.
+It is not part of backlog-cap estimation because backlog calibration
+uses active-period observations only.
+
+Sampling phase
+--------------
+Sample once at each controller-equivalent 1-ms decision boundary,
+before the next inter-slice scheduling action.
+
+Expected samples:
+
+    10000 samples per scenario/seed/slice.
+
+Expected run count:
+
+    4 traffic scenarios
+    x 3 seeds
+    = 12 runs
+
+Cap-selection rule
+------------------
+Caps are selected separately for:
+
+- eMBB
+- URLLC
+- mMTC
+
+For every scenario/seed run and slice, compute the empirical
+99.9th percentile using:
+
+    numpy.quantile(values, 0.999, method="higher")
+
+For slice s:
+
+    run_q999_max =
+        maximum 99.9th percentile across all calibration runs.
+
+    cap_bytes =
+        max(
+            1024,
+            ceil(run_q999_max / 1024) * 1024
+        )
+
+Thus each cap is rounded upward to the next 1-KiB boundary.
+
+Validation criterion
+--------------------
+For every individual scenario/seed/slice:
+
+    fraction(raw_backlog_bytes > cap_bytes) <= 0.001
+
+The criterion must hold independently for every run, not only for
+pooled calibration data.
+
+A zero-length, missing, non-finite, negative, malformed, duplicated,
+or incomplete calibration record invalidates the collection.
+
+Reported descriptive statistics
+--------------------------------
+For every scenario/seed/slice report:
+
+- sample count
+- minimum
+- median
+- p90
+- p95
+- p99
+- p99.9
+- maximum
+- selected cap
+- number above cap
+- fraction above cap
+
+Also report pooled descriptive statistics per slice.
+
+Evidence and provenance requirements
+------------------------------------
+The post-fix collection must use a new output location and must not
+overwrite, modify, merge with, or replace the historical pre-fix
+collection.
+
+Before scientific collection begins:
+
+- the protocol and collection launcher must already be committed;
+- the tracked worktree must be clean;
+- the exact collection source commit must be recorded;
+- the collection source commit must descend from
+  84b731a85732d10dbb30f5374b2e11c3715d86e4;
+- the protocol SHA-256 must be recorded and verified.
+
+The completed evidence set must preserve:
+
+- simulator-semantics anchor;
+- exact collection source commit;
+- protocol path;
+- protocol SHA-256;
+- traffic scenario;
+- seed;
+- active duration;
+- sampling interval;
+- complete raw observations;
+- per-run raw-file SHA-256 values;
+- combined raw-data SHA-256;
+- per-run summaries;
+- pooled summaries;
+- selected caps;
+- analysis-file SHA-256 values;
+- expected and observed run counts;
+- per-run validation results;
+- final all-runs validation result.
+
+Anti-leakage rule
+-----------------
+Held-out final evaluation results must not be used to select or
+increase normalization caps.
+
+If later training workloads intentionally exceed the calibration
+envelope, a new normalization protocol must be documented before
+using held-out evaluation results.
+
+Formal-verification implication
+-------------------------------
+After the post-fix byte caps are frozen and the byte-state
+representation is explicitly wired into AssuredQoS, normalized
+backlog inputs will be bounded in [0, 1].
+
+Values above a frozen physical calibration cap will deterministically
+clip to 1.0.
+
+This protocol does not claim to verify the scheduler or simulator.
+It defines only the empirical calibration domain used to establish
+fixed backlog normalization bounds.
