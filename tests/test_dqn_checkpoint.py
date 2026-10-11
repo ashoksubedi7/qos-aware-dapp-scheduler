@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -169,3 +170,35 @@ def test_evaluation_mode_blocks_training():
             before,
             after,
         )
+
+
+@pytest.mark.parametrize(
+    "reserved_key,reserved_value",
+    (
+        ("input_dim", 999),
+        ("action_dim", 999),
+        ("epsilon", 0.123),
+        ("training_steps", 999),
+    ),
+)
+def test_checkpoint_rejects_reserved_metadata_before_writing(
+    tmp_path,
+    reserved_key,
+    reserved_value,
+):
+    agent = make_agent()
+
+    checkpoint_dir = (
+        tmp_path
+        / "checkpoint"
+    )
+
+    with pytest.raises(ValueError):
+        agent.save_checkpoint(
+            checkpoint_dir,
+            metadata={
+                reserved_key: reserved_value,
+            },
+        )
+
+    assert not checkpoint_dir.exists()

@@ -390,6 +390,28 @@ class DQNAgent:
             directory
         )
 
+        if metadata is not None:
+            reserved_metadata_keys = {
+                "input_dim",
+                "action_dim",
+                "epsilon",
+                "training_steps",
+            }
+
+            conflicting_keys = (
+                reserved_metadata_keys
+                .intersection(metadata)
+            )
+
+            if conflicting_keys:
+                raise ValueError(
+                    "checkpoint metadata cannot "
+                    "override agent-owned fields: "
+                    + ", ".join(
+                        sorted(conflicting_keys)
+                    )
+                )
+
         directory.mkdir(
             parents=True,
             exist_ok=True,
