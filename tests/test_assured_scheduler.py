@@ -764,6 +764,7 @@ def test_training_transition_does_not_decay_without_update():
     scheduler.config = SimpleNamespace(
         training_mode=True
     )
+    scheduler.learning_enabled = True
 
     scheduler.agent = _TrainingProbeAgent(
         training_loss=None
@@ -800,6 +801,7 @@ def test_training_transition_decays_after_successful_update():
     scheduler.config = SimpleNamespace(
         training_mode=True
     )
+    scheduler.learning_enabled = True
 
     scheduler.agent = _TrainingProbeAgent(
         training_loss=0.125
@@ -834,6 +836,77 @@ def test_training_transition_is_inactive_in_evaluation_mode():
         state="state",
         action=5,
         reward=0.75,
+        next_state="next_state",
+    )
+
+    assert result is None
+    assert scheduler.agent.remember_calls == []
+    assert scheduler.agent.train_step_calls == 0
+    assert scheduler.agent.decay_epsilon_calls == 0
+
+
+
+def test_training_scheduler_starts_with_learning_enabled():
+    scheduler = AssuredScheduler(
+        [10],
+        "FR1",
+        False,
+        False,
+        1.0,
+        config=ExperimentConfig(
+            training_mode=True,
+            seed=7,
+        ),
+    )
+
+    assert scheduler.learning_enabled is True
+
+
+def test_freeze_learning_preserves_policy_behavior_and_blocks_updates():
+    scheduler = AssuredScheduler.__new__(
+        AssuredScheduler
+    )
+
+    scheduler.config = SimpleNamespace(
+        training_mode=True
+    )
+
+    scheduler.learning_enabled = True
+
+    scheduler.agent = _TrainingProbeAgent(
+        training_loss=0.125
+    )
+
+    scheduler.agent.epsilon = 0.37
+    scheduler.agent.evaluation_mode = False
+
+    explore_values = []
+
+    def select_action(state, explore):
+        explore_values.append(explore)
+        return 4
+
+    scheduler.agent.select_action = select_action
+
+    epsilon_before = scheduler.agent.epsilon
+
+    scheduler.freeze_learning()
+
+    assert scheduler.learning_enabled is False
+    assert scheduler.agent.epsilon == epsilon_before
+    assert scheduler.agent.evaluation_mode is False
+
+    action = scheduler.select_policy_action(
+        "state"
+    )
+
+    assert action == 4
+    assert explore_values == [True]
+
+    result = scheduler._train_transition(
+        state="state",
+        action=4,
+        reward=0.25,
         next_state="next_state",
     )
 

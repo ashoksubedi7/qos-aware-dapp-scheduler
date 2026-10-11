@@ -106,6 +106,14 @@ class AssuredScheduler(InterSliceScheduler):
 
         self.config = config
 
+        # Runtime learning state is separate from
+        # evaluation mode. Scientific training can
+        # freeze replay/optimization while preserving
+        # the behavioral policy reached at that point.
+        self.learning_enabled = bool(
+            self.config.training_mode
+        )
+
         set_global_seed(
             self.config.seed
         )
@@ -677,6 +685,13 @@ class AssuredScheduler(InterSliceScheduler):
             explore=self.config.training_mode,
         )
 
+    def freeze_learning(self):
+        """
+        Stop replay mutation and optimizer updates
+        without changing epsilon or evaluation mode.
+        """
+        self.learning_enabled = False
+
     def _train_transition(
         self,
         state,
@@ -692,7 +707,10 @@ class AssuredScheduler(InterSliceScheduler):
         optimizer update.
         """
 
-        if not self.config.training_mode:
+        if (
+            not self.config.training_mode
+            or not self.learning_enabled
+        ):
             return None
 
         self.agent.remember(
