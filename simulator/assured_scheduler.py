@@ -11,7 +11,7 @@ from assured_interval import (
 from assured_metrics import (
     build_m1_state,
     build_m2_state,
-    slice_backlog,
+    slice_backlog_bytes,
     slice_mean_sinr,
     slice_max_hol_delay,
 )
@@ -238,8 +238,12 @@ class AssuredScheduler(InterSliceScheduler):
         slices = self._canonical_slices()
 
         common = {
-            "backlog_cap":
-                self.config.backlog_cap,
+            "embb_backlog_cap_bytes":
+                self.config.embb_backlog_cap_bytes,
+            "urllc_backlog_cap_bytes":
+                self.config.urllc_backlog_cap_bytes,
+            "mmtc_backlog_cap_bytes":
+                self.config.mmtc_backlog_cap_bytes,
             "sinr_min_db":
                 self.config.sinr_min_db,
             "sinr_max_db":
@@ -268,6 +272,15 @@ class AssuredScheduler(InterSliceScheduler):
     ):
         slices = self._canonical_slices()
 
+        backlog_caps = {
+            "eMBB":
+                self.config.embb_backlog_cap_bytes,
+            "URLLC":
+                self.config.urllc_backlog_cap_bytes,
+            "mMTC":
+                self.config.mmtc_backlog_cap_bytes,
+        }
+
         for name in (
             "eMBB",
             "URLLC",
@@ -275,7 +288,7 @@ class AssuredScheduler(InterSliceScheduler):
         ):
             slice_obj = slices[name]
 
-            backlog = slice_backlog(
+            backlog = slice_backlog_bytes(
                 slice_obj
             )
 
@@ -285,7 +298,7 @@ class AssuredScheduler(InterSliceScheduler):
 
             self.normalization_diagnostics.record_backlog(
                 backlog,
-                self.config.backlog_cap,
+                backlog_caps[name],
             )
 
             self.normalization_diagnostics.record_sinr(
