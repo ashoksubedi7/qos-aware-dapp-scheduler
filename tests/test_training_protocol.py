@@ -352,3 +352,74 @@ def test_invalid_epsilon_derivation_range_fails():
             epsilon_start=0.05,
             epsilon_min=0.05,
         )
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        True,
+        False,
+        25_000.0,
+        25_000.5,
+    ),
+)
+def test_noninteger_training_protocol_counts_fail(
+    value,
+):
+    with pytest.raises(
+        TypeError,
+        match=(
+            "successful gradient-update budget must be a "
+            "non-Boolean integer"
+        ),
+    ):
+        TrainingProtocol(
+            successful_gradient_update_budget=value,
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        True,
+        False,
+        20_000.0,
+        20_000.5,
+    ),
+)
+def test_noninteger_epsilon_floor_update_fails(
+    value,
+):
+    with pytest.raises(
+        TypeError,
+        match=(
+            "epsilon-floor update must be a "
+            "non-Boolean integer"
+        ),
+    ):
+        TrainingProtocol(
+            epsilon_floor_update=value,
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        True,
+        False,
+        5_000.0,
+        5_000.5,
+    ),
+)
+def test_noninteger_checkpoint_interval_updates_fails(
+    value,
+):
+    with pytest.raises(
+        TypeError,
+        match=(
+            "checkpoint interval must be a "
+            "non-Boolean integer"
+        ),
+    ):
+        TrainingProtocol(
+            checkpoint_interval_updates=value,
+        )

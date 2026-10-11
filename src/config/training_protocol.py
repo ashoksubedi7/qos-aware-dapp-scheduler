@@ -292,6 +292,63 @@ class TrainingProtocol:
         if (
             self.successful_gradient_update_budget
             is not None
+            and (
+                not isinstance(
+                    self.successful_gradient_update_budget,
+                    int,
+                )
+                or isinstance(
+                    self.successful_gradient_update_budget,
+                    bool,
+                )
+            )
+        ):
+            raise TypeError(
+                "successful gradient-update budget must be a "
+                "non-Boolean integer"
+            )
+
+        if (
+            self.epsilon_floor_update
+            is not None
+            and (
+                not isinstance(
+                    self.epsilon_floor_update,
+                    int,
+                )
+                or isinstance(
+                    self.epsilon_floor_update,
+                    bool,
+                )
+            )
+        ):
+            raise TypeError(
+                "epsilon-floor update must be a "
+                "non-Boolean integer"
+            )
+
+        if (
+            self.checkpoint_interval_updates
+            is not None
+            and (
+                not isinstance(
+                    self.checkpoint_interval_updates,
+                    int,
+                )
+                or isinstance(
+                    self.checkpoint_interval_updates,
+                    bool,
+                )
+            )
+        ):
+            raise TypeError(
+                "checkpoint interval must be a "
+                "non-Boolean integer"
+            )
+
+        if (
+            self.successful_gradient_update_budget
+            is not None
             and
             self.successful_gradient_update_budget
             <= 0
