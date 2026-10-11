@@ -86,16 +86,13 @@ class IntraSliceScheduler:
             if self.dbMd:
                 self.printQstate(env)
             self.queueUpdate()
-            # Count the PRB capacity made available for this
-		# scheduling opportunity. Because each numerology
-		# executes at its own TTI rate, cumulative PRB-slots
-		# are comparable across the configured numerologies.
-            self.assuredPrbsAvailable += int(
-                self.nrbUEmax
-            )
+            # Preserve the capacity committed to this TTI.
+            # Count it together with transmission on completion.
+            tti_capacity = int(self.nrbUEmax)
             yield env.timeout(
                 1.0 / self.ttiByms
             )
+            self.assuredPrbsAvailable += tti_capacity
             self.printDebDataDM(
                 "<h4>Transport Blocks served at time = " + str(env.now) + "</h4>"
             )

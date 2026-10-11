@@ -163,7 +163,7 @@ class FakeEnv:
         return value
 
 
-def test_scheduler_counts_available_prbs_once_per_tti():
+def test_scheduler_excludes_incomplete_tti_capacity():
     scheduler = IntraSliceScheduler.__new__(
         IntraSliceScheduler
     )
@@ -182,14 +182,16 @@ def test_scheduler_counts_available_prbs_once_per_tti():
         env
     )
 
-    # Advance only until the first yield.  The available
-    # PRB capacity for that TTI must already be counted.
+    # Advance only until the first yield. The TTI is
+    # incomplete, so its capacity is not yet counted.
     next(process)
 
     assert (
         scheduler.assuredPrbsAvailable
-        == 7
+        == 0
     )
+
+
 def test_scheduled_prbs_visible_in_same_control_interval():
     env = simpy.Environment()
 
@@ -293,3 +295,109 @@ def test_scheduled_prbs_visible_in_same_control_interval():
         observed["used_delta"]
         == 0
     )
+
+
+def test_tti_capacity_is_attributed_to_completed_tti():
+    scheduler = IntraSliceScheduler.__new__(
+        IntraSliceScheduler
+    )
+
+    scheduler.dbMd = False
+    scheduler.nrbUEmax = 30
+    scheduler.ttiByms = 1
+
+    scheduler.assuredPrbsAvailable = 0
+    scheduler.queueUpdate = lambda: None
+
+    env = FakeEnv()
+
+    process = scheduler.queuesOut(env)
+
+    # The TTI has started, but has not finished.
+    assert next(process) == 1.0
+
+    # Its capacity must not yet be included in
+    # completed-TTI utilization accounting.
+    assert scheduler.assuredPrbsAvailable == 0
+
+
+def test_tti_reallocation_preserves_committed_capacity():
+    import pytest
+    from IntraSliceSch import TBqueue, TransportBlock
+    from metrics.service_metrics import prb_utilization
+
+    scheduler = IntraSliceScheduler.__new__(
+        IntraSliceScheduler
+    )
+
+    scheduler.dbMd = False
+    scheduler.ttiByms = 1
+    scheduler.nrbUEmax = 30
+    scheduler.sbFrNum = 0
+
+    scheduler.assuredPrbsUsed = 0
+    scheduler.assuredPrbsAvailable = 0
+
+    scheduler.queue = TBqueue(30)
+    scheduler.queueUpdate = lambda: None
+    scheduler.printDebDataDM = (
+        lambda *args, **kwargs: None
+    )
+
+    ue = SimpleNamespace(
+        resUse=0,
+        bler=0.0,
+        TXedTB=0,
+        sndbytes=0,
+        packetFlows=[
+            SimpleNamespace(rcvdBytes=0)
+        ],
+    )
+
+    scheduler.ues = {"UE1": ue}
+
+    # Six committed transport blocks, four PRBs each.
+    # Signaling blocks isolate PRB accounting from
+    # packet-level QoS bookkeeping.
+    for index in range(6):
+        block = TransportBlock(
+            index,
+            "4-QAM",
+            "UE1",
+            "Sig",
+            [],
+            4,
+            20,
+        )
+        assert scheduler.queue.insertTB(block)
+
+    env = FakeEnv()
+    process = scheduler.queuesOut(env)
+
+    # Begin a TTI under the 30-PRB allocation.
+    assert next(process) == 1.0
+
+    assert scheduler.assuredPrbsAvailable == 0
+    assert len(scheduler.queue.res) == 6
+
+    # Reallocate while these 24 PRBs are in flight.
+    scheduler.nrbUEmax = 11
+    scheduler.queue.updateSize(11)
+
+    assert sum(
+        block.numRB
+        for block in scheduler.queue.res
+    ) == 24
+
+    # Complete the previous TTI and begin the next.
+    assert next(process) == 1.0
+
+    assert scheduler.assuredPrbsUsed == 24
+    assert scheduler.assuredPrbsAvailable == 30
+    assert ue.TXedTB == 6
+    assert len(scheduler.queue.res) == 0
+
+    assert prb_utilization(
+        scheduler.assuredPrbsUsed,
+        scheduler.assuredPrbsAvailable,
+    ) == pytest.approx(0.8)
