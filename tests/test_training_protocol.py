@@ -423,3 +423,69 @@ def test_noninteger_checkpoint_interval_updates_fails(
         TrainingProtocol(
             checkpoint_interval_updates=value,
         )
+
+
+def test_active_duration_is_derived_from_successful_update_budget():
+    protocol = TrainingProtocol(
+        successful_gradient_update_budget=3,
+        epsilon_floor_update=2,
+        checkpoint_interval_updates=1,
+    )
+
+    assert (
+        protocol.derive_active_training_duration_ms(
+            min_replay_size=2,
+            control_interval_ms=1.0,
+        )
+        == pytest.approx(4.0)
+    )
+
+
+@pytest.mark.parametrize(
+    "min_replay_size",
+    [True, False, 2.0, 2.5],
+)
+def test_active_duration_rejects_noninteger_replay_warmup(
+    min_replay_size,
+):
+    protocol = TrainingProtocol(
+        successful_gradient_update_budget=3,
+        epsilon_floor_update=2,
+        checkpoint_interval_updates=1,
+    )
+
+    with pytest.raises(TypeError):
+        protocol.derive_active_training_duration_ms(
+            min_replay_size=min_replay_size,
+            control_interval_ms=1.0,
+        )
+
+
+@pytest.mark.parametrize(
+    "control_interval_ms",
+    [0.0, -1.0, float("nan"), float("inf")],
+)
+def test_active_duration_requires_positive_control_interval(
+    control_interval_ms,
+):
+    protocol = TrainingProtocol(
+        successful_gradient_update_budget=3,
+        epsilon_floor_update=2,
+        checkpoint_interval_updates=1,
+    )
+
+    with pytest.raises(ValueError):
+        protocol.derive_active_training_duration_ms(
+            min_replay_size=2,
+            control_interval_ms=control_interval_ms,
+        )
+
+
+def test_active_duration_requires_frozen_update_budget():
+    protocol = TrainingProtocol()
+
+    with pytest.raises(RuntimeError):
+        protocol.derive_active_training_duration_ms(
+            min_replay_size=1000,
+            control_interval_ms=1.0,
+        )

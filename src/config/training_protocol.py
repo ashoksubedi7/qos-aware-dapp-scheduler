@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 from experiments.checkpoint_aggregation import (
@@ -442,6 +443,79 @@ class TrainingProtocol:
             / float(
                 self.epsilon_floor_update
             )
+        )
+
+    def derive_active_training_duration_ms(
+        self,
+        min_replay_size,
+        control_interval_ms,
+    ):
+        """
+        Derive the active simulator duration needed to
+        complete the frozen successful-update budget.
+
+        One transition is recorded per control interval.
+        The first successful optimizer update occurs when
+        replay size first reaches min_replay_size.
+        """
+        if self.successful_gradient_update_budget is None:
+            raise RuntimeError(
+                "successful gradient-update budget "
+                "has not been frozen"
+            )
+
+        if (
+            not isinstance(min_replay_size, int)
+            or isinstance(min_replay_size, bool)
+        ):
+            raise TypeError(
+                "min_replay_size must be a "
+                "non-Boolean integer"
+            )
+
+        if min_replay_size <= 0:
+            raise ValueError(
+                "min_replay_size must be positive"
+            )
+
+        if (
+            not isinstance(
+                control_interval_ms,
+                (int, float),
+            )
+            or isinstance(
+                control_interval_ms,
+                bool,
+            )
+        ):
+            raise TypeError(
+                "control_interval_ms must be numeric"
+            )
+
+        control_interval_ms = float(
+            control_interval_ms
+        )
+
+        if (
+            not math.isfinite(control_interval_ms)
+            or control_interval_ms <= 0
+        ):
+            raise ValueError(
+                "control_interval_ms must be "
+                "finite and positive"
+            )
+
+        transition_count = (
+            min_replay_size
+            +
+            self.successful_gradient_update_budget
+            -
+            1
+        )
+
+        return (
+            float(transition_count)
+            * control_interval_ms
         )
 
     def unresolved_items(self):
