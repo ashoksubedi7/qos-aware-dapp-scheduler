@@ -1,6 +1,8 @@
 from dataclasses import asdict, dataclass
 
 
+from environment.traffic_scenarios import get_traffic_scenario
+
 VALID_MODEL_VARIANTS = (
     "M1",
     "M2",
@@ -37,12 +39,13 @@ class ExperimentConfig:
     control_interval_ms: float = 1.0
     radio_update_interval_ms: float = 10.0
     # Duration after traffic generation stops during which
-	# scheduling, radio evolution, retransmissions, and packet
-	# completion continue.
-	#
-	# Keep zero until the drain duration is calibrated and frozen
-	# for the primary experiments.
-    drain_duration_ms: float = 0.0
+    # scheduling, radio evolution, retransmissions, and packet
+    # completion continue.
+    #
+    # Frozen primary value from the post-buffer-fix drain
+    # calibration. Explicit zero remains valid for protocols that
+    # intentionally disable post-traffic draining.
+    drain_duration_ms: float = 1000.0
 
     urllc_scheduling_deadline_ms: float = 1.0
 
@@ -175,6 +178,10 @@ class ExperimentConfig:
                 "starvation_threshold_ms must "
                 "be greater than zero"
             )
+
+        get_traffic_scenario(
+            self.traffic_scenario
+        )
 
         if (
             self.radio_scenario

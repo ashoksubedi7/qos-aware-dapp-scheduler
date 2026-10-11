@@ -35,3 +35,11 @@ def test_negative_drain_duration_is_rejected():
         ExperimentConfig(
             drain_duration_ms=-1.0,
         )
+
+def test_default_drain_duration_uses_frozen_primary_value():
+    config = ExperimentConfig()
+
+    assert (
+        config.drain_duration_ms
+        == 1000.0
+    )
