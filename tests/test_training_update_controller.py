@@ -208,3 +208,101 @@ def test_controller_rejects_updates_after_budget(
             6,
             0.1,
         )
+
+
+def test_controller_carries_base_checkpoint_metadata(
+    tmp_path,
+):
+    base_metadata = {
+        "source_commit": (
+            "0123456789abcdef"
+            "0123456789abcdef"
+            "01234567"
+        ),
+        "training_protocol_sha256": "a" * 64,
+        "experiment_config_sha256": "b" * 64,
+        "run_definition_sha256": "c" * 64,
+    }
+
+    controller = TrainingUpdateController(
+        protocol=_protocol(),
+        checkpoint_root=tmp_path,
+        base_checkpoint_metadata=base_metadata,
+    )
+
+    # The controller must own a snapshot rather than
+    # retaining a mutable caller dictionary.
+    base_metadata[
+        "run_definition_sha256"
+    ] = "d" * 64
+
+    scheduler = _ProbeScheduler()
+
+    for step in range(1, 3):
+        scheduler.agent.training_steps = step
+
+        controller(
+            scheduler,
+            step,
+            0.1 * step,
+        )
+
+    assert len(
+        scheduler.agent.saved
+    ) == 1
+
+    saved_metadata = (
+        scheduler.agent.saved[0][1]
+    )
+
+    assert saved_metadata[
+        "source_commit"
+    ] == (
+        "0123456789abcdef"
+        "0123456789abcdef"
+        "01234567"
+    )
+
+    assert saved_metadata[
+        "training_protocol_sha256"
+    ] == "a" * 64
+
+    assert saved_metadata[
+        "experiment_config_sha256"
+    ] == "b" * 64
+
+    assert saved_metadata[
+        "run_definition_sha256"
+    ] == "c" * 64
+
+    assert saved_metadata[
+        "training_step"
+    ] == 2
+
+    assert saved_metadata[
+        "step_basis"
+    ] == "successful_gradient_update"
+
+
+@pytest.mark.parametrize(
+    "reserved_key",
+    (
+        "training_step",
+        "training_loss",
+        "model_variant",
+        "seed",
+        "step_basis",
+    ),
+)
+def test_controller_rejects_base_metadata_collisions(
+    tmp_path,
+    reserved_key,
+):
+    with pytest.raises(ValueError):
+        TrainingUpdateController(
+            protocol=_protocol(),
+            checkpoint_root=tmp_path,
+            base_checkpoint_metadata={
+                reserved_key: "invalid",
+            },
+        )

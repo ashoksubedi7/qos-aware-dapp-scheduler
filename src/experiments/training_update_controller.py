@@ -20,6 +20,7 @@ class TrainingUpdateController:
         self,
         protocol,
         checkpoint_root,
+        base_checkpoint_metadata=None,
     ):
         if not isinstance(
             protocol,
@@ -35,6 +36,37 @@ class TrainingUpdateController:
         self.checkpoint_root = Path(
             checkpoint_root
         )
+
+        if base_checkpoint_metadata is None:
+            base_checkpoint_metadata = {}
+
+        self.base_checkpoint_metadata = dict(
+            base_checkpoint_metadata
+        )
+
+        controller_owned_metadata_keys = {
+            "training_step",
+            "training_loss",
+            "model_variant",
+            "seed",
+            "step_basis",
+        }
+
+        conflicting_keys = (
+            controller_owned_metadata_keys
+            .intersection(
+                self.base_checkpoint_metadata
+            )
+        )
+
+        if conflicting_keys:
+            raise ValueError(
+                "base checkpoint metadata cannot "
+                "override controller-owned fields: "
+                + ", ".join(
+                    sorted(conflicting_keys)
+                )
+            )
 
         self._candidate_steps = set(
             candidate_checkpoint_steps(
@@ -117,9 +149,12 @@ class TrainingUpdateController:
                 )
             )
 
-            scheduler.agent.save_checkpoint(
-                checkpoint_directory,
-                metadata={
+            checkpoint_metadata = dict(
+                self.base_checkpoint_metadata
+            )
+
+            checkpoint_metadata.update(
+                {
                     "training_step": training_step,
                     "training_loss": float(
                         training_loss
@@ -133,7 +168,12 @@ class TrainingUpdateController:
                     "step_basis": (
                         "successful_gradient_update"
                     ),
-                },
+                }
+            )
+
+            scheduler.agent.save_checkpoint(
+                checkpoint_directory,
+                metadata=checkpoint_metadata,
             )
 
             self._saved_checkpoint_steps.append(
