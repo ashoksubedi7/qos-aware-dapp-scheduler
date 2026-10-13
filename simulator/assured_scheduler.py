@@ -716,6 +716,18 @@ class AssuredScheduler(InterSliceScheduler):
 
         self.successful_update_callback = callback
 
+    def set_training_recorder(self, recorder):
+        """Attach optional persistent training-data recording."""
+        if recorder is not None:
+            for method in ("record_transition", "record_update"):
+                if not callable(getattr(recorder, method, None)):
+                    raise TypeError(
+                        "training recorder must provide "
+                        "record_transition and record_update"
+                    )
+
+        self._training_recorder = recorder
+
     def _train_transition(
         self,
         state,
@@ -745,6 +757,23 @@ class AssuredScheduler(InterSliceScheduler):
             False,
         )
 
+        recorder = getattr(
+            self,
+            "_training_recorder",
+            None,
+        )
+
+        if recorder is not None:
+            recorder.record_transition(
+                state=state,
+                action=action,
+                reward=reward,
+                next_state=next_state,
+                done=False,
+                training_step=int(self.agent.training_steps),
+                epsilon=float(self.agent.epsilon),
+            )
+
         training_loss = (
             self.agent.train_step()
         )
@@ -762,6 +791,13 @@ class AssuredScheduler(InterSliceScheduler):
                         self.agent.training_steps
                     ),
                     float(training_loss),
+                )
+
+            if recorder is not None:
+                recorder.record_update(
+                    training_step=int(self.agent.training_steps),
+                    training_loss=float(training_loss),
+                    epsilon=float(self.agent.epsilon),
                 )
 
         return training_loss

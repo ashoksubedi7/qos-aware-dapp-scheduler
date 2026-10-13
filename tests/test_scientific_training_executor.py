@@ -51,6 +51,7 @@ class _ProbeScheduler:
 
         self.learning_enabled = True
         self.callback = None
+        self.training_recorder = None
         self.slice_calls = []
 
     def set_successful_update_callback(
@@ -58,6 +59,12 @@ class _ProbeScheduler:
         callback,
     ):
         self.callback = callback
+
+    def set_training_recorder(
+        self,
+        recorder,
+    ):
+        self.training_recorder = recorder
 
     def createSlice(
         self,
@@ -207,6 +214,31 @@ class _ProbeEnvironment:
             self.protocol
             .successful_gradient_update_budget
         )
+
+        if scheduler.training_recorder is not None:
+            state_width = (
+                6 if scheduler.config.model_variant == "M1"
+                else 7
+            )
+
+            state_vector = [0.0] * state_width
+
+            for step in range(1, budget + 1):
+                scheduler.training_recorder.record_transition(
+                    state=state_vector,
+                    action=0,
+                    reward=0.0,
+                    next_state=state_vector,
+                    done=False,
+                    training_step=step - 1,
+                    epsilon=1.0,
+                )
+
+                scheduler.training_recorder.record_update(
+                    training_step=step,
+                    training_loss=0.25,
+                    epsilon=1.0,
+                )
 
         scheduler.agent.training_steps = (
             budget
@@ -436,7 +468,7 @@ def _install_probe_runtime(
         close_scheduler_files,
     )
 
-    summary = object()
+    summary = SimpleNamespace(conservation_ok=True)
     state["summary"] = summary
 
     def build_summary(
