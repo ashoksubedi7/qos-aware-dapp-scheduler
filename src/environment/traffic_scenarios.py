@@ -122,8 +122,35 @@ SIMULTANEOUS_HIGH = TrafficScenario(
 )
 
 
+LIGHT_LOAD = TrafficScenario(
+    name="LIGHT_LOAD",
+    embb=SliceTrafficProfile(
+        users_dl=4,
+        packet_size_bytes=1200,
+        arrival_rate=24.0,
+        size_distribution="Pareto",
+        arrival_distribution="Uniform",
+    ),
+    urllc=SliceTrafficProfile(
+        users_dl=8,
+        packet_size_bytes=300,
+        arrival_rate=12.0,
+        size_distribution="Constant",
+        arrival_distribution="Uniform",
+    ),
+    mmtc=SliceTrafficProfile(
+        users_dl=30,
+        packet_size_bytes=100,
+        arrival_rate=200.0,
+        size_distribution="Constant",
+        arrival_distribution="Uniform",
+    ),
+)
+
+
 _SCENARIOS = {
     BASELINE.name: BASELINE,
+    LIGHT_LOAD.name: LIGHT_LOAD,
     CONGESTED.name: CONGESTED,
     URLLC_HIGH.name: URLLC_HIGH,
     SIMULTANEOUS_HIGH.name: SIMULTANEOUS_HIGH,
