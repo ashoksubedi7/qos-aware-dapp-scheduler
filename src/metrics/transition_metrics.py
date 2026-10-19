@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-
+import math
 from metrics.deadline_metrics import interval_deadline_metrics
 from metrics.service_metrics import (
     normalized_throughput_service,
@@ -87,7 +87,7 @@ def derive_transition_metrics(
         deadline_after,
     )
 
-    embb_service = normalized_throughput_service(
+    embb_service = _embb_service(
         embb_delivered_bytes,
         interval_ms,
         embb_target_mbps,
@@ -116,4 +116,23 @@ def derive_transition_metrics(
         mmtc_service=mmtc_service,
         utilization=utilization,
         deadline_miss_ratio=deadline["miss_ratio"],
+    )
+
+def _embb_service(delivered_bytes, interval_ms, target_mbps):
+    if not math.isfinite(target_mbps) or target_mbps < 0:
+        raise ValueError("eMBB target must be finite and nonnegative")
+
+    if target_mbps == 0:
+        if not math.isfinite(interval_ms) or interval_ms <= 0:
+            raise ValueError("interval_ms must be positive and finite")
+        if delivered_bytes != 0:
+            raise ValueError(
+                "eMBB bytes delivered without an active throughput target"
+            )
+        return 0.0
+
+    return normalized_throughput_service(
+        delivered_bytes,
+        interval_ms,
+        target_mbps,
     )

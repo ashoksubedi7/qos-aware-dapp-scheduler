@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
-
+import pytest
+from metrics.transition_metrics import _embb_service
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,3 +93,40 @@ def test_transition_metrics():
     assert np.isclose(metrics.mmtc_service, 0.5)
     assert np.isclose(metrics.utilization, 0.5)
     assert np.isclose(metrics.deadline_miss_ratio, 0.2)
+
+def test_inactive_embb_service_returns_zero():
+    assert _embb_service(
+        delivered_bytes=0,
+        interval_ms=1.0,
+        target_mbps=0.0,
+    ) == 0.0
+
+
+def test_inactive_embb_rejects_unaccounted_delivery():
+    with pytest.raises(ValueError, match="bytes delivered"):
+        _embb_service(
+            delivered_bytes=1200,
+            interval_ms=1.0,
+            target_mbps=0.0,
+        )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [-1.0, float("nan"), float("inf")],
+)
+def test_embb_service_rejects_invalid_target(target):
+    with pytest.raises(ValueError):
+        _embb_service(
+            delivered_bytes=0,
+            interval_ms=1.0,
+            target_mbps=target,
+        )
+
+
+def test_active_embb_service_preserves_normalization():
+    assert _embb_service(
+        delivered_bytes=1000,
+        interval_ms=1.0,
+        target_mbps=8.0,
+    ) == pytest.approx(1.0)
