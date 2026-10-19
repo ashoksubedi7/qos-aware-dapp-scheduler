@@ -805,3 +805,138 @@ def test_action_budget_changes_production_deadline_outcome(
         assert flow.deliveredPackets == 1
         assert flow.completedPacketIds == {77}
         assert flow.completionDelays == pytest.approx([0.5])
+
+
+def test_three_ue_deadline_avoidability_between_actions():
+    import simpy
+
+    from UE import Packet, PacketFlow
+    from IntraSliceSch import TBqueue
+    from Scheds_Intra import RR_Scheduler
+    from common.action_space import get_action_weights
+    from common.prb_allocation import (
+        percentage_action_to_numerology_prbs,
+    )
+
+    def replay(action):
+        allocation = percentage_action_to_numerology_prbs(
+            total_reference_prbs=32,
+            weights=get_action_weights(action),
+            num_ref_factors=(1, 4, 1),
+        )
+        budget = int(allocation[1])
+
+        scheduler = None
+        users = {}
+        packets = {}
+        flows = {}
+
+        for index in range(1, 4):
+            name = f"ue{index}"
+            packet = Packet(100 + index, 50, 0.0, name)
+            packet.deadline = 0.45
+
+            candidate, ue, _, _ = make_data_ptotb_scheduler(
+                packets=[packet],
+                insert_success=True,
+            )
+
+            flow = PacketFlow(
+                1, 300, 0.6, name,
+                "DL", "URLLC",
+                0, 1, "Constant", "Uniform", 0.45,
+            )
+
+            packet_id = int(packet.secNum)
+            flow.generatedPacketIds.add(packet_id)
+            flow.packetGenerationTimes[packet_id] = 0.0
+
+            ue.packetFlows = [flow]
+            ue.id = name
+            ue.BWPs = 20
+            ue.pendingTB = []
+            ue.pendingPckts = {}
+            ue.bler = 0.0
+            ue.resUse = 0
+            ue.TXedTB = 0
+            ue.sndbytes = 0
+            ue.lostTB = 0
+
+            users[name] = ue
+            packets[name] = packet
+            flows[name] = flow
+
+            if scheduler is None:
+                scheduler = candidate
+
+        scheduler.ues = users
+        scheduler.queue = TBqueue(budget)
+
+        scheduler.insertTB = lambda *args, **kwargs: (
+            IntraSliceScheduler.insertTB(
+                scheduler, *args, **kwargs
+            )
+        )
+        scheduler.resAlloc = lambda n: (
+            RR_Scheduler.resAlloc(scheduler, n)
+        )
+        scheduler.printResAlloc = lambda: None
+        scheduler.updSumPcks = lambda: 0
+
+        scheduler.schType = "Rr"
+        scheduler.nrbUEmax = budget
+        scheduler.mimomd = "SU"
+        scheduler.nlayers = 1
+        scheduler.ind_u = 0
+        scheduler.sbFrNum = 2
+        scheduler.sLoad = 0.003
+        scheduler.dbMd = False
+        scheduler.ttiByms = 4
+        scheduler.rets = 0
+        scheduler.assuredPrbsUsed = 0
+        scheduler.assuredPrbsAvailable = 0
+
+        env = simpy.Environment()
+
+        def run_mac():
+            yield env.timeout(0.25)
+            yield from scheduler.queuesOut(env)
+
+        env.process(run_mac())
+        env.run(until=0.46)
+
+        outcomes = {}
+
+        for name, packet in packets.items():
+            flow = flows[name]
+            flow.recordDeadlineCrossing(packet, env.now)
+
+            met = (
+                packet.scheduled_at is not None
+                and packet.scheduled_at <= 0.45
+            )
+
+            assert flow.deadlineEvaluated == 1
+            assert flow.deadlineMisses == int(not met)
+
+            outcomes[name] = met
+
+        return budget, outcomes
+
+    budget_20, outcome_20 = replay(20)
+    budget_17, outcome_17 = replay(17)
+
+    assert budget_20 == 2
+    assert budget_17 == 5
+
+    assert outcome_20 == {
+        "ue1": False,
+        "ue2": False,
+        "ue3": False,
+    }
+
+    assert outcome_17 == {
+        "ue1": True,
+        "ue2": False,
+        "ue3": False,
+    }
