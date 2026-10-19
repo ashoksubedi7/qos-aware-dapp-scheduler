@@ -1,0 +1,1275 @@
+{
+  "mode": "alternative",
+  "seed": 202,
+  "greedy_action_at_1ms": 13,
+  "snapshots": {
+    "1.0": {
+      "schema_version": 1,
+      "time_ms": 1.0,
+      "observation": [
+        0.0,
+        0.0005254331044852734,
+        0.00024982576724141836,
+        0.0,
+        0.7857142686843872,
+        0.7857142686843872
+      ],
+      "selected_action": 17,
+      "action_weights": [
+        20,
+        60,
+        20
+      ],
+      "reference_prbs_available": 52,
+      "proposed_slice_prbs": [
+        10,
+        8,
+        10
+      ],
+      "slices": {
+        "eMBB": {
+          "num_ref_factor": 1,
+          "registered_ue_count": 0,
+          "rr_index": 0,
+          "tti_per_ms": 1,
+          "ues": []
+        },
+        "URLLC": {
+          "num_ref_factor": 4,
+          "registered_ue_count": 3,
+          "rr_index": 0,
+          "tti_per_ms": 4,
+          "ues": [
+            {
+              "ue_id": "ue2",
+              "rr_position": 0,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 3,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 0.7886209630285668,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 1.7886209630285668,
+                      "remaining_deadline_ms": 0.7886209630285668
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 1
+            },
+            {
+              "ue_id": "ue7",
+              "rr_position": 1,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 2,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 0.9439704928228527,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 1.9439704928228527,
+                      "remaining_deadline_ms": 0.9439704928228527
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 1
+            },
+            {
+              "ue_id": "ue8",
+              "rr_position": 2,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 0.7208157949777421,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 1.720815794977742,
+                      "remaining_deadline_ms": 0.7208157949777421
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            }
+          ]
+        },
+        "mMTC": {
+          "num_ref_factor": 1,
+          "registered_ue_count": 11,
+          "rr_index": 0,
+          "tti_per_ms": 1,
+          "ues": [
+            {
+              "ue_id": "ue18",
+              "rr_position": 0,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.05487828592299988,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue8",
+              "rr_position": 1,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.12789925494963378,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    },
+                    {
+                      "packet_id": 2,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.4070644234692555,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue7",
+              "rr_position": 2,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.18259027458977944,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue15",
+              "rr_position": 3,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.20869193548724846,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue12",
+              "rr_position": 4,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.38470676556354516,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue23",
+              "rr_position": 5,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.45605749847328914,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue21",
+              "rr_position": 6,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.640748043210928,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue20",
+              "rr_position": 7,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.6737354203292997,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue13",
+              "rr_position": 8,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.8070689277853255,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue6",
+              "rr_position": 9,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.8690245967948608,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue25",
+              "rr_position": 10,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.9492931258599264,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            }
+          ]
+        }
+      }
+    },
+    "2.0": {
+      "schema_version": 1,
+      "time_ms": 2.0,
+      "observation": [
+        0.0060194870457053185,
+        0.0008757218020036817,
+        0.00047883272054605186,
+        0.7857142686843872,
+        0.7857142686843872,
+        0.7857142686843872
+      ],
+      "selected_action": 14,
+      "action_weights": [
+        40,
+        0,
+        60
+      ],
+      "reference_prbs_available": 52,
+      "proposed_slice_prbs": [
+        21,
+        0,
+        31
+      ],
+      "slices": {
+        "eMBB": {
+          "num_ref_factor": 1,
+          "registered_ue_count": 2,
+          "rr_index": 0,
+          "tti_per_ms": 1,
+          "ues": [
+            {
+              "ue_id": "ue4",
+              "rr_position": 0,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 1230.0,
+                      "generated_at_ms": 0.9860892885148947,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    },
+                    {
+                      "packet_id": 2,
+                      "size_bytes": 1235.0,
+                      "generated_at_ms": 1.2748531836705443,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    },
+                    {
+                      "packet_id": 3,
+                      "size_bytes": 1230.0,
+                      "generated_at_ms": 1.2793218243540847,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue1",
+              "rr_position": 1,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 1230.0,
+                      "generated_at_ms": 1.6585149480608024,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            }
+          ]
+        },
+        "URLLC": {
+          "num_ref_factor": 4,
+          "registered_ue_count": 5,
+          "rr_index": 2,
+          "tti_per_ms": 4,
+          "ues": [
+            {
+              "ue_id": "ue2",
+              "rr_position": 0,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 6,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 1.7182668607526916,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 2.7182668607526916,
+                      "remaining_deadline_ms": 0.7182668607526916
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 1
+            },
+            {
+              "ue_id": "ue7",
+              "rr_position": 1,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 4,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 1.7112888282043905,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 2.7112888282043905,
+                      "remaining_deadline_ms": 0.7112888282043905
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 1
+            },
+            {
+              "ue_id": "ue8",
+              "rr_position": 2,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 3,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 1.6728815660028533,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 2.6728815660028533,
+                      "remaining_deadline_ms": 0.6728815660028533
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue5",
+              "rr_position": 3,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 3,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 1.5278180372084713,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 2.5278180372084713,
+                      "remaining_deadline_ms": 0.5278180372084713
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue4",
+              "rr_position": 4,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": 1.0,
+              "application_packets": [
+                {
+                  "packet_id": 3,
+                  "size_bytes": 330.0,
+                  "generated_at_ms": 1.972897698493714,
+                  "scheduled_at_ms": null,
+                  "deadline_at_ms": 2.972897698493714,
+                  "remaining_deadline_ms": 0.9728976984937141
+                },
+                {
+                  "packet_id": 4,
+                  "size_bytes": 330.0,
+                  "generated_at_ms": 1.9946661837270494,
+                  "scheduled_at_ms": null,
+                  "deadline_at_ms": 2.994666183727049,
+                  "remaining_deadline_ms": 0.9946661837270492
+                }
+              ],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 2,
+                      "size_bytes": 330.0,
+                      "generated_at_ms": 1.4867444944375257,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": 2.4867444944375254,
+                      "remaining_deadline_ms": 0.48674449443752543
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            }
+          ]
+        },
+        "mMTC": {
+          "num_ref_factor": 1,
+          "registered_ue_count": 21,
+          "rr_index": 10,
+          "tti_per_ms": 1,
+          "ues": [
+            {
+              "ue_id": "ue18",
+              "rr_position": 0,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.05487828592299988,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue8",
+              "rr_position": 1,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.12789925494963378,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    },
+                    {
+                      "packet_id": 2,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.4070644234692555,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue7",
+              "rr_position": 2,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.18259027458977944,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue15",
+              "rr_position": 3,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.20869193548724846,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue12",
+              "rr_position": 4,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.38470676556354516,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue23",
+              "rr_position": 5,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.45605749847328914,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue21",
+              "rr_position": 6,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.640748043210928,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue20",
+              "rr_position": 7,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.6737354203292997,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue13",
+              "rr_position": 8,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.8070689277853255,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue6",
+              "rr_position": 9,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 0.8690245967948608,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    },
+                    {
+                      "packet_id": 2,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.3088314271230308,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    },
+                    {
+                      "packet_id": 3,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.7805673479586517,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue25",
+              "rr_position": 10,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": []
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 1
+            },
+            {
+              "ue_id": "ue30",
+              "rr_position": 11,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.0634515653970416,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue22",
+              "rr_position": 12,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.2038135145515345,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue3",
+              "rr_position": 13,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.375296656044588,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue17",
+              "rr_position": 14,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.3984691571298007,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue27",
+              "rr_position": 15,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.4586917855679553,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue19",
+              "rr_position": 16,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.5428794089012516,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue11",
+              "rr_position": 17,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.5785421311551449,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue26",
+              "rr_position": 18,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [
+                {
+                  "packet_id": 2,
+                  "size_bytes": 130.0,
+                  "generated_at_ms": 1.9850354719723635,
+                  "scheduled_at_ms": null,
+                  "deadline_at_ms": null,
+                  "remaining_deadline_ms": null
+                }
+              ],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.6897060781343416,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue1",
+              "rr_position": 19,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.807722919790641,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            },
+            {
+              "ue_id": "ue2",
+              "rr_position": 20,
+              "sinr_db": 27.5,
+              "bwp_prbs": 20,
+              "scheduling_deadline_ms": null,
+              "application_packets": [],
+              "bearer_queues": [
+                {
+                  "bearer_index": 0,
+                  "packets": [
+                    {
+                      "packet_id": 1,
+                      "size_bytes": 130.0,
+                      "generated_at_ms": 1.90977093058168,
+                      "scheduled_at_ms": null,
+                      "deadline_at_ms": null,
+                      "remaining_deadline_ms": null
+                    }
+                  ]
+                }
+              ],
+              "pending_tb_count": 0,
+              "pending_packet_count": 0
+            }
+          ]
+        }
+      }
+    }
+  },
+  "deadline_counts": {
+    "1.0": {
+      "ue2": {
+        "evaluated": 1,
+        "misses": 0
+      },
+      "ue7": {
+        "evaluated": 1,
+        "misses": 0
+      },
+      "ue8": {
+        "evaluated": 0,
+        "misses": 0
+      }
+    },
+    "2.0": {
+      "ue2": {
+        "evaluated": 4,
+        "misses": 0
+      },
+      "ue7": {
+        "evaluated": 3,
+        "misses": 0
+      },
+      "ue8": {
+        "evaluated": 2,
+        "misses": 0
+      }
+    }
+  },
+  "tracked_packets": {
+    "ue2:3": {
+      "generated_at_ms": 0.7886209630285668,
+      "size_bytes": 330.0,
+      "deadline_at_ms": 1.7886209630285668,
+      "scheduled_at_ms": 1.0,
+      "met_first_scheduling_deadline": true
+    },
+    "ue7:2": {
+      "generated_at_ms": 0.9439704928228527,
+      "size_bytes": 330.0,
+      "deadline_at_ms": 1.9439704928228527,
+      "scheduled_at_ms": 1.0,
+      "met_first_scheduling_deadline": true
+    },
+    "ue8:1": {
+      "generated_at_ms": 0.7208157949777421,
+      "size_bytes": 330.0,
+      "deadline_at_ms": 1.720815794977742,
+      "scheduled_at_ms": 1.0,
+      "met_first_scheduling_deadline": true
+    }
+  },
+  "conservation_ok": true
+}
