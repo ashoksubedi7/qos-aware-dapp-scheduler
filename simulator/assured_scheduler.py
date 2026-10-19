@@ -834,6 +834,26 @@ class AssuredScheduler(InterSliceScheduler):
                 state,
             )
 
+            observer = getattr(
+                self,
+                "decision_snapshot_observer",
+                None,
+            )
+
+            if observer is not None:
+                from assurance.decision_snapshot import (
+                    capture_decision_snapshot,
+                )
+
+                observer(
+                    capture_decision_snapshot(
+                        self,
+                        env.now,
+                        state,
+                        action,
+                    )
+                )
+
             self.action = int(action)
 
             self.apply_action(

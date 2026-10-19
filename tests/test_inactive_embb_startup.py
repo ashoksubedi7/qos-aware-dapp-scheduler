@@ -1,3 +1,4 @@
+import json
 import math
 
 import simpy
@@ -35,6 +36,19 @@ def test_control_loop_handles_no_connected_embb_users(
     )
 
     scheduler = cell.interSliceSched
+
+    snapshots = []
+    applied = []
+    original_apply = scheduler.apply_action
+
+    scheduler.decision_snapshot_observer = snapshots.append
+
+    def record_apply(action):
+        result = original_apply(action)
+        applied.append(result)
+        return result
+
+    scheduler.apply_action = record_apply
     traffic = evaluation.get_traffic_scenario("BASELINE")
 
     total_duration_ms = (
@@ -105,3 +119,15 @@ def test_control_loop_handles_no_connected_embb_users(
     assert observed_targets == [(1.0, 0.0)]
     assert len(embb.schedulerDL.ues) == 0
     assert math.isfinite(scheduler.reward)
+
+    assert snapshots
+    assert len(snapshots) == len(applied)
+
+    for snapshot, result in zip(snapshots, applied):
+        assert result["action"] == snapshot["selected_action"]
+        assert (
+            list(result["slice_prbs"])
+            == snapshot["proposed_slice_prbs"]
+        )
+        assert len(snapshot["observation"]) == 6
+        json.dumps(snapshot, allow_nan=False)
