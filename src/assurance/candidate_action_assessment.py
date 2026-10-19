@@ -6,6 +6,7 @@ UNKNOWN makes no claim of feasibility or infeasibility.
 """
 
 import math
+from numbers import Integral
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -48,6 +49,7 @@ def assess_candidate_actions(
     *,
     control_precedes_current_mac_event=False,
     include_diagnostics=False,
+    only_action=None,
 ):
     """Evaluate the finite DQN action catalog without applying actions.
 
@@ -69,6 +71,18 @@ def assess_candidate_actions(
         raise TypeError('control order must be boolean')
     if type(include_diagnostics) is not bool:
         raise TypeError('diagnostics flag must be boolean')
+
+    if only_action is None:
+        action_indices = range(ACTION_SPACE_SIZE)
+    else:
+        if (
+            isinstance(only_action, bool)
+            or not isinstance(only_action, Integral)
+            or not 0 <= int(only_action) < ACTION_SPACE_SIZE
+        ):
+            raise ValueError("invalid candidate action")
+
+        action_indices = (int(only_action),)
 
     factors = tuple(num_ref_factors)
     if len(factors) != 3:
@@ -123,6 +137,18 @@ def assess_candidate_actions(
         )
     )
 
+    has_actionable_bearer_demand = any(
+        opportunity.bearer_visible_now
+        and (
+            opportunity.future_events_before_deadline > 0
+            or (
+                control_precedes_current_mac_event
+                and opportunity.on_current_event_boundary
+            )
+        )
+        for _, opportunity in imminent
+    )
+
     already_overdue = any(
         packet.absolute_deadline_ms < now
         for packet in packets
@@ -144,7 +170,7 @@ def assess_candidate_actions(
 
     results = []
 
-    for action in range(ACTION_SPACE_SIZE):
+    for action in action_indices:
         weights = tuple(
             int(value) for value in get_action_weights(action)
         )
@@ -200,7 +226,7 @@ def assess_candidate_actions(
 
         if (
             urllc_prbs == 0
-            and imminent
+            and has_actionable_bearer_demand
             and not has_boundary_ambiguity
         ):
             verdict = "REJECT"
@@ -235,3 +261,41 @@ def assess_candidate_actions(
         )
 
     return tuple(results)
+
+
+
+def assess_proposed_action(
+    urllc_slice,
+    proposed_action,
+    now_ms,
+    control_interval_ms,
+    clock,
+    total_reference_prbs,
+    num_ref_factors,
+    *,
+    control_precedes_current_mac_event=False,
+):
+    """Assess only the proposed action, without radio diagnostics.
+
+    The verdict uses the same necessary-condition rules as
+    the full-catalog evaluator. No scheduler action is applied.
+    """
+    if proposed_action is None:
+        raise ValueError("proposed action is required")
+
+    results = assess_candidate_actions(
+        urllc_slice=urllc_slice,
+        now_ms=now_ms,
+        control_interval_ms=control_interval_ms,
+        clock=clock,
+        total_reference_prbs=total_reference_prbs,
+        num_ref_factors=num_ref_factors,
+        control_precedes_current_mac_event=(
+            control_precedes_current_mac_event
+        ),
+        include_diagnostics=False,
+        only_action=proposed_action,
+    )
+
+    assert len(results) == 1
+    return results[0]
